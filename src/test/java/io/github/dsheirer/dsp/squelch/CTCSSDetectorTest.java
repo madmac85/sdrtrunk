@@ -126,7 +126,7 @@ public class CTCSSDetectorTest
     @Test
     void testHysteresisPreventsInstantDetection()
     {
-        // Feed only 30ms of tone - should NOT be enough to trigger detection (hysteresis requires ~200ms)
+        // Feed only 30ms of tone - should NOT be enough to trigger detection (hysteresis requires ~500ms)
         float[] shortTone = generateTone(TARGET_FREQUENCY, TONE_AMPLITUDE, 0.03);
         mDetector.process(shortTone);
         assertFalse(mDetector.isToneDetected(), "30ms of tone should not be enough to trigger detection");

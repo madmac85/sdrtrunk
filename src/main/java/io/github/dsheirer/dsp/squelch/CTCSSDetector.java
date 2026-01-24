@@ -23,30 +23,23 @@ package io.github.dsheirer.dsp.squelch;
  * frequency in demodulated FM audio. Uses hysteresis to avoid rapid toggling of the detection state.
  *
  * The detector accumulates samples into blocks and evaluates each block for the presence of the target tone.
+ * Block size is set to 250ms which provides sufficient frequency resolution (~4 Hz) to distinguish adjacent
+ * CTCSS tones while the center bin's main lobe naturally covers the ±2% frequency tolerance.
  * A configurable number of consecutive positive/negative detections are required before the state changes.
  */
 public class CTCSSDetector
 {
-    private static final int DEFAULT_HYSTERESIS_OPEN = 4;
-    private static final int DEFAULT_HYSTERESIS_CLOSE = 6;
+    private static final int DEFAULT_HYSTERESIS_OPEN = 2;
+    private static final int DEFAULT_HYSTERESIS_CLOSE = 3;
     private static final double DETECTION_THRESHOLD_DB = -10.0;
-    private static final double FREQUENCY_TOLERANCE = 0.02; // +/- 2%
 
     private final double mTargetFrequency;
     private double mSampleRate;
     private int mBlockSize;
     private double mCoefficient;
-    private double mCoefficientLow;
-    private double mCoefficientHigh;
     private double mS;
     private double mSPrev;
     private double mSPrev2;
-    private double mSLow;
-    private double mSPrevLow;
-    private double mSPrev2Low;
-    private double mSHigh;
-    private double mSPrevHigh;
-    private double mSPrev2High;
     private int mSampleCount;
     private boolean mToneDetected;
     private int mHysteresisCount;
@@ -65,32 +58,29 @@ public class CTCSSDetector
 
     /**
      * Sets the sample rate and recalculates internal parameters.
-     * Block size is chosen to give approximately 200ms detection windows.
+     * Block size is set to 250ms which places the Goertzel first null at the adjacent CTCSS tone spacing (~4 Hz),
+     * providing clean rejection of adjacent tones while the main lobe covers ±2% frequency tolerance.
      * @param sampleRate of the incoming demodulated audio stream
      */
     public void setSampleRate(double sampleRate)
     {
         mSampleRate = sampleRate;
 
-        // Block size targets ~50ms windows for responsive detection.
-        // Multiple blocks are required via hysteresis for state change.
-        mBlockSize = (int)(sampleRate * 0.05);
+        // Block size targets 250ms for sufficient frequency resolution to reject adjacent CTCSS tones.
+        // At 250ms, the first null is at sampleRate/blockSize Hz offset from center, which for typical
+        // sample rates gives ~4 Hz resolution matching the minimum CTCSS tone spacing.
+        mBlockSize = (int)(sampleRate * 0.25);
 
-        // Ensure block size gives at least 3 full cycles of the target frequency for accuracy
-        int minimumBlockSize = (int)(3.0 * sampleRate / mTargetFrequency);
+        // Ensure block size gives at least 10 full cycles of the target frequency for accuracy
+        int minimumBlockSize = (int)(10.0 * sampleRate / mTargetFrequency);
         if(mBlockSize < minimumBlockSize)
         {
             mBlockSize = minimumBlockSize;
         }
 
-        // Pre-calculate Goertzel coefficients for target and tolerance bounds
+        // Pre-calculate Goertzel coefficient for the target frequency
         double normalizedFrequency = mTargetFrequency / sampleRate;
         mCoefficient = 2.0 * Math.cos(2.0 * Math.PI * normalizedFrequency);
-
-        double lowFrequency = mTargetFrequency * (1.0 - FREQUENCY_TOLERANCE);
-        double highFrequency = mTargetFrequency * (1.0 + FREQUENCY_TOLERANCE);
-        mCoefficientLow = 2.0 * Math.cos(2.0 * Math.PI * lowFrequency / sampleRate);
-        mCoefficientHigh = 2.0 * Math.cos(2.0 * Math.PI * highFrequency / sampleRate);
 
         reset();
     }
@@ -103,12 +93,6 @@ public class CTCSSDetector
         mS = 0;
         mSPrev = 0;
         mSPrev2 = 0;
-        mSLow = 0;
-        mSPrevLow = 0;
-        mSPrev2Low = 0;
-        mSHigh = 0;
-        mSPrevHigh = 0;
-        mSPrev2High = 0;
         mSampleCount = 0;
     }
 
@@ -143,16 +127,6 @@ public class CTCSSDetector
             mSPrev2 = mSPrev;
             mSPrev = mS;
 
-            // Goertzel iteration for low tolerance bound
-            mSLow = sample + (mCoefficientLow * mSPrevLow) - mSPrev2Low;
-            mSPrev2Low = mSPrevLow;
-            mSPrevLow = mSLow;
-
-            // Goertzel iteration for high tolerance bound
-            mSHigh = sample + (mCoefficientHigh * mSPrevHigh) - mSPrev2High;
-            mSPrev2High = mSPrevHigh;
-            mSPrevHigh = mSHigh;
-
             mSampleCount++;
 
             if(mSampleCount >= mBlockSize)
@@ -166,21 +140,15 @@ public class CTCSSDetector
 
     /**
      * Evaluates the current block for tone presence using the Goertzel magnitude result.
-     * Compares the tone energy at the target frequency (and tolerance bounds) against the
-     * total signal energy to determine if the tone is present.
+     * Compares the tone energy at the target frequency against a fixed reference level
+     * calibrated for typical CTCSS tone amplitudes.
      */
     private void evaluateBlock()
     {
-        // Calculate magnitude squared for each frequency bin
-        double magnitudeCenter = getMagnitudeSquared(mSPrev, mSPrev2, mCoefficient);
-        double magnitudeLow = getMagnitudeSquared(mSPrevLow, mSPrev2Low, mCoefficientLow);
-        double magnitudeHigh = getMagnitudeSquared(mSPrevHigh, mSPrev2High, mCoefficientHigh);
+        double magnitude = getMagnitudeSquared(mSPrev, mSPrev2, mCoefficient);
 
-        // Use the maximum magnitude across the tolerance band
-        double magnitude = Math.max(magnitudeCenter, Math.max(magnitudeLow, magnitudeHigh));
-
-        // Calculate total signal power for normalization
-        double totalPower = getTotalPower();
+        // Fixed reference level scaled to block size
+        double totalPower = (double)mBlockSize * mBlockSize * 0.01;
 
         boolean tonePresent;
         if(totalPower <= 0)
@@ -189,7 +157,6 @@ public class CTCSSDetector
         }
         else
         {
-            // Compare tone power ratio to threshold
             double ratio = 10.0 * Math.log10(magnitude / totalPower);
             tonePresent = ratio > DETECTION_THRESHOLD_DB;
         }
@@ -228,19 +195,6 @@ public class CTCSSDetector
     }
 
     /**
-     * Calculates the total signal power by computing the sum of squares across the stored
-     * Goertzel state. This uses the DC bin (bin 0) magnitude as a proxy for total power.
-     */
-    private double getTotalPower()
-    {
-        // Use the sum of the Goertzel magnitudes at center, low, and high as a baseline,
-        // but for proper normalization we use the magnitude at center frequency relative to
-        // the block size. The threshold is calibrated to detect typical CTCSS tone levels
-        // (-15 to -20 dB relative to voice audio).
-        return mBlockSize * mBlockSize * 0.01; // Normalized reference level
-    }
-
-    /**
      * Resets the Goertzel state variables for the next block
      */
     private void resetGoertzelState()
@@ -248,11 +202,5 @@ public class CTCSSDetector
         mS = 0;
         mSPrev = 0;
         mSPrev2 = 0;
-        mSLow = 0;
-        mSPrevLow = 0;
-        mSPrev2Low = 0;
-        mSHigh = 0;
-        mSPrevHigh = 0;
-        mSPrev2High = 0;
     }
 }
