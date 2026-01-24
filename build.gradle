@@ -391,3 +391,21 @@ tasks.register('runtimeZipOthers', org.beryx.runtime.RuntimeZipTask) {rt ->
 
     configure(rt, jvmArgsLinux)
 }
+
+/**
+ * Runs the LSM v2 comparison test against a baseband WAV file.
+ * Usage: ./gradlew runComparison -PbasebandFile=path/to/baseband.wav
+ */
+tasks.register('runComparison', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.dsheirer.module.decode.p25.phase1.LSMv2ComparisonTest'
+    if(os.isWindows()) {
+        jvmArgs = jvmArgsWindows
+    } else {
+        jvmArgs = jvmArgsLinux
+    }
+    if(project.hasProperty('basebandFile')) {
+        args = [project.property('basebandFile')]
+    }
+}

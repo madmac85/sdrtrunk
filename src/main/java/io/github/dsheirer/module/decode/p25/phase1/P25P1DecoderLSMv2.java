@@ -55,6 +55,11 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
     private static final Map<Double,float[]> BASEBAND_FILTERS = new HashMap<>();
     private static final int SYMBOL_RATE = 4800;
 
+    // Transmission boundary detection constants
+    private static final float ENERGY_EMA_FACTOR = 0.001f;
+    private static final float ENERGY_SILENCE_RATIO = 0.1f; // silence = below 10% of peak
+    private static final double SILENCE_DURATION_SECONDS = 0.5;
+
     private final P25P1DemodulatorLSMv2 mDemodulator;
     private final P25P1MessageFramer mMessageFramer = new P25P1MessageFramer();
     private final P25P1MessageProcessor mMessageProcessor = new P25P1MessageProcessor();
@@ -65,6 +70,13 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
     private IRealFilter mBasebandFilterQ;
     private IRealFilter mPulseShapingFilterI;
     private IRealFilter mPulseShapingFilterQ;
+
+    // Transmission boundary detection state
+    private float mEnergyAverage = 0f;
+    private float mPeakEnergy = 0f;
+    private int mSilenceSampleCount = 0;
+    private int mSilenceSamplesThreshold = 12500;
+    private boolean mInSilence = true;
 
     @Override
     public DecoderType getDecoderType()
@@ -126,6 +138,7 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
         mBasebandFilterI = FilterFactory.getRealFilter(getBasebandFilter(decimatedSampleRate));
         mBasebandFilterQ = FilterFactory.getRealFilter(getBasebandFilter(decimatedSampleRate));
         mDemodulator.setSamplesPerSymbol(decimatedSampleRate / (float)SYMBOL_RATE);
+        mSilenceSamplesThreshold = (int)(decimatedSampleRate * SILENCE_DURATION_SECONDS);
         mMessageFramer.setListener(mMessageProcessor);
     }
 
@@ -145,6 +158,9 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
         i = mDecimationFilterI.decimateReal(i);
         q = mDecimationFilterQ.decimateReal(q);
 
+        //Detect transmission boundaries on raw decimated samples (before filtering distorts energy levels)
+        detectTransmissionBoundary(i, q);
+
         //Process buffer for power measurements
         mPowerMonitor.process(i, q);
 
@@ -156,6 +172,52 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
 
         //Demodulate samples into symbols with timing, sync detection, and message framing.
         mDemodulator.process(i, q);
+    }
+
+    /**
+     * Monitors energy on raw decimated I/Q samples to detect transmission boundaries.
+     * Uses a dynamic threshold: silence is when energy drops below 10% of the observed peak.
+     * When sustained silence (500ms) is followed by signal return, triggers a cold-start reset.
+     */
+    private void detectTransmissionBoundary(float[] i, float[] q)
+    {
+        for(int idx = 0; idx < i.length; idx++)
+        {
+            float energy = (i[idx] * i[idx]) + (q[idx] * q[idx]);
+            mEnergyAverage += (energy - mEnergyAverage) * ENERGY_EMA_FACTOR;
+
+            // Track peak energy with slow decay (adapts to signal level)
+            if(mEnergyAverage > mPeakEnergy)
+            {
+                mPeakEnergy = mEnergyAverage;
+            }
+            else
+            {
+                // Slow decay: ~10 second time constant at 25 kHz
+                mPeakEnergy *= 0.99999f;
+            }
+
+            float silenceThreshold = mPeakEnergy * ENERGY_SILENCE_RATIO;
+
+            if(mPeakEnergy > 0 && mEnergyAverage < silenceThreshold)
+            {
+                mSilenceSampleCount++;
+                if(mSilenceSampleCount >= mSilenceSamplesThreshold)
+                {
+                    mInSilence = true;
+                }
+            }
+            else
+            {
+                if(mInSilence && mPeakEnergy > 0)
+                {
+                    // Transition from silence to signal — new transmission starting
+                    mDemodulator.coldStartReset();
+                    mInSilence = false;
+                }
+                mSilenceSampleCount = 0;
+            }
+        }
     }
 
     /**
@@ -268,5 +330,16 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
     public Listener<ComplexSamples> getComplexSamplesListener()
     {
         return this;
+    }
+
+    /**
+     * Returns diagnostic statistics from the v2 demodulator for testing/tuning.
+     */
+    public String getDiagnostics()
+    {
+        return mDemodulator.getDiagnostics() +
+                String.format(" | Peak energy: %.6f | Silence threshold: %d samples (%.0fms)",
+                        mPeakEnergy, mSilenceSamplesThreshold,
+                        mSilenceSamplesThreshold * 1000.0 / (mSilenceSamplesThreshold / SILENCE_DURATION_SECONDS));
     }
 }

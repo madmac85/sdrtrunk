@@ -31,36 +31,28 @@ import java.util.Arrays;
  * P25 Phase 1 LSM v2 demodulator with improved cold-start handling for conventional (PTT) channels.
  *
  * Improvements over P25P1DemodulatorLSM:
- * - Transmission boundary detection via sample energy monitoring
- * - Cold-start reset of differential state (previousSymbol zeroed, first symbol skipped)
- * - Adaptive PLL gain (acquisition mode → tracking mode)
- * - Fast AGC convergence during cold-start
- * - Gardner TED suppression for first 2 symbols after reset
+ * - Cold-start reset of PLL and differential state on transmission boundary (triggered by decoder)
+ * - Brief PLL acquisition boost (0.12 gain for 15 symbols) after reset for faster carrier lock
+ * - Gardner TED suppression for first 2 symbols after reset to avoid timing instability
+ * - First differential symbol skipped after reset (no valid reference)
  */
 public class P25P1DemodulatorLSMv2
 {
     private static final float HALF_PI = (float)(Math.PI / 2.0);
-    private static final float TWO_PI = (float)(Math.PI * 2.0);
     private static final float MAX_PLL = (float)(Math.PI / 3.0); //+/- 800 Hz
     private static final float OBJECTIVE_MAGNITUDE = 1.0f;
     private static final int SYMBOL_RATE = 4800;
 
-    // Adaptive PLL parameters
-    private static final float PLL_GAIN_ACQUISITION = 0.25f;
-    private static final float PLL_GAIN_TRACKING = 0.05f;
-    private static final int PLL_ACQUISITION_SYMBOLS = 50;
+    // PLL gain
+    private static final float PLL_GAIN_ACQUISITION = 0.12f;
+    private static final float PLL_GAIN_TRACKING = 0.1f;
+    private static final int PLL_ACQUISITION_SYMBOLS = 15;
 
-    // Fast AGC parameters
-    private static final float AGC_GAIN_FAST = 0.2f;
-    private static final float AGC_GAIN_NORMAL = 0.05f;
-    private static final int AGC_FAST_SYMBOLS = 20;
+    // AGC gain (matches original LSM)
+    private static final float AGC_GAIN = 0.05f;
 
     // Gardner TED suppression
     private static final int TED_SUPPRESSION_SYMBOLS = 2;
-
-    // Transmission boundary detection
-    private static final float ENERGY_THRESHOLD = 0.001f;
-    private static final int SILENCE_SAMPLES_THRESHOLD = 960; // ~200ms at 4800 sym/sec
 
     private final DibitToByteBufferAssembler mDibitAssembler = new DibitToByteBufferAssembler(300);
     private final FeedbackDecoder mFeedbackDecoder;
@@ -80,11 +72,7 @@ public class P25P1DemodulatorLSMv2
     // Cold-start state tracking
     private int mSymbolsSinceReset = 0;
     private boolean mFirstSymbolAfterReset = true;
-
-    // Transmission boundary detection state
-    private int mSilenceSampleCount = 0;
-    private boolean mInSilence = true;
-    private float mEnergyAverage = 0f;
+    private int mColdStartResetCount = 0;
 
     /**
      * Constructs an instance
@@ -106,12 +94,15 @@ public class P25P1DemodulatorLSMv2
     }
 
     /**
-     * Performs a cold-start reset of all demodulator state. Called when a transmission boundary is detected.
+     * Performs a cold-start reset when a transmission boundary is detected.
+     *
+     * Resets PLL (new transmitter may have different carrier offset) and differential state
+     * (previous symbol is invalid after silence). Preserves AGC gain since signal level is
+     * approximately the same on the channel.
      */
-    private void coldStartReset()
+    public void coldStartReset()
     {
         mPLL = 0f;
-        mSampleGain = 1.0f;
         mPreviousSymbolI = 0f;
         mPreviousSymbolQ = 0f;
         mPreviousMiddleI = 0f;
@@ -120,6 +111,15 @@ public class P25P1DemodulatorLSMv2
         mPreviousCurrentQ = 0f;
         mSymbolsSinceReset = 0;
         mFirstSymbolAfterReset = true;
+        mColdStartResetCount++;
+    }
+
+    /**
+     * Returns diagnostic statistics for testing purposes.
+     */
+    public String getDiagnostics()
+    {
+        return String.format("Cold-start resets: %d", mColdStartResetCount);
     }
 
     /**
@@ -129,9 +129,6 @@ public class P25P1DemodulatorLSMv2
      */
     public void process(float[] i, float[] q)
     {
-        // Check for transmission boundary before processing symbols
-        detectTransmissionBoundary(i, q);
-
         //Shadow copy heap member variables onto the stack
         double samplePoint = mSamplePoint;
         double samplesPerSymbol = mSamplesPerSymbol;
@@ -153,7 +150,6 @@ public class P25P1DemodulatorLSMv2
         double pointer, residual, timingAdjustment;
         float magnitude, phaseError = 0, requiredGain, softSymbol, pllI, pllQ, pllTemp;
         float iMiddle, qMiddle, iCurrent, qCurrent, iMiddleDemodulated, qMiddleDemodulated, iSymbol, qSymbol;
-        float pllGain, agcGain;
         int offset;
         Dibit hardSymbol;
 
@@ -195,16 +191,13 @@ public class P25P1DemodulatorLSMv2
                 iCurrent = LinearInterpolator.calculate(mBufferI[offset], mBufferI[offset + 1], residual);
                 qCurrent = LinearInterpolator.calculate(mBufferQ[offset], mBufferQ[offset + 1], residual);
 
-                // Select adaptive AGC gain based on symbols since reset
-                agcGain = (symbolsSinceReset < AGC_FAST_SYMBOLS) ? AGC_GAIN_FAST : AGC_GAIN_NORMAL;
-
                 //Adjust sample gain based on highest magnitude and apply to both middle and current samples.
                 magnitude = (float)(Math.sqrt(Math.pow(iCurrent, 2.0) + Math.pow(qCurrent, 2.0)));
 
                 if(magnitude > 0 && !Float.isInfinite(magnitude))
                 {
                     requiredGain = constrain(OBJECTIVE_MAGNITUDE / magnitude, 500);
-                    sampleGain += (requiredGain - sampleGain) * agcGain;
+                    sampleGain += (requiredGain - sampleGain) * AGC_GAIN;
                     sampleGain = Math.min(sampleGain, requiredGain);
                     sampleGain = Math.min(sampleGain, 500);
                 }
@@ -265,14 +258,13 @@ public class P25P1DemodulatorLSMv2
                     samplePoint += timingAdjustment;
                 }
 
-                // Select adaptive PLL gain based on symbols since reset
-                pllGain = (symbolsSinceReset < PLL_ACQUISITION_SYMBOLS) ? PLL_GAIN_ACQUISITION : PLL_GAIN_TRACKING;
-
-                //Phase Locked Loop adjustment
+                //Phase Locked Loop adjustment with brief acquisition boost after cold-start
                 if(softSymbol != 0)
                 {
                     hardSymbol = toDibit(softSymbol);
                     phaseError = constrain(softSymbol - hardSymbol.getIdealPhase(), .3f);
+                    float pllGain = (symbolsSinceReset < PLL_ACQUISITION_SYMBOLS) ?
+                            PLL_GAIN_ACQUISITION : PLL_GAIN_TRACKING;
                     pll -= (phaseError * pllGain);
                     pll = constrain(pll, MAX_PLL);
                 }
@@ -319,37 +311,6 @@ public class P25P1DemodulatorLSMv2
         mFirstSymbolAfterReset = firstSymbolAfterReset;
     }
 
-    /**
-     * Monitors incoming sample energy to detect transmission boundaries. When samples have been below
-     * the energy threshold for SILENCE_SAMPLES_THRESHOLD samples and then rise above, triggers a cold-start reset.
-     */
-    private void detectTransmissionBoundary(float[] i, float[] q)
-    {
-        for(int idx = 0; idx < i.length; idx++)
-        {
-            float energy = (i[idx] * i[idx]) + (q[idx] * q[idx]);
-            mEnergyAverage += (energy - mEnergyAverage) * 0.01f;
-
-            if(mEnergyAverage < ENERGY_THRESHOLD)
-            {
-                mSilenceSampleCount++;
-                if(mSilenceSampleCount >= SILENCE_SAMPLES_THRESHOLD)
-                {
-                    mInSilence = true;
-                }
-            }
-            else
-            {
-                if(mInSilence)
-                {
-                    // Transition from silence to signal — new transmission starting
-                    coldStartReset();
-                    mInSilence = false;
-                }
-                mSilenceSampleCount = 0;
-            }
-        }
-    }
 
     /**
      * Constrains value to range: -constraint to constraint
@@ -399,10 +360,6 @@ public class P25P1DemodulatorLSMv2
         mBufferI = new float[mBufferReserve];
         mBufferQ = new float[mBufferReserve];
         mBufferPointer = 0;
-
-        // Calculate silence threshold based on actual sample rate
-        // 200ms * (samplesPerSymbol * symbolRate) = samples for 200ms
-        // But SILENCE_SAMPLES_THRESHOLD is already set for ~200ms at the decimated rate
     }
 
     /**

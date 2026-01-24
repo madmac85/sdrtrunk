@@ -91,7 +91,12 @@ public class LSMv2ComparisonTest
                 (double)lsmV2Stats.validMessages / lsmV2Stats.totalMessages * 100.0 : 0;
         System.out.println(String.format("%-25s %9.1f%% %9.1f%% %+9.1f%%", "Valid Rate",
                 lsmRate, v2Rate, v2Rate - lsmRate));
+        System.out.println();
+        System.out.println("=== LSM v2 DIAGNOSTICS ===");
+        System.out.println(sV2Diagnostics);
     }
+
+    private static String sV2Diagnostics = "";
 
     private static DecoderStats runDecoder(File file, boolean useV2)
     {
@@ -135,6 +140,7 @@ public class LSMv2ComparisonTest
                 decoder.setSampleRate(source.getSampleRate());
 
                 processFile(source);
+                sV2Diagnostics = decoder.getDiagnostics();
                 decoder.stop();
             }
             else
