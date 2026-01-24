@@ -33,3 +33,6 @@ gradle-app.setting
 
 # Cache of project
 .gradletasknamecache
+
+# Baseband sample recordings for testing
+_SAMPLES/
