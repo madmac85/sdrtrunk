@@ -1,0 +1,441 @@
+/*
+ * *****************************************************************************
+ * Copyright (C) 2014-2025 Dennis Sheirer
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>
+ * ****************************************************************************
+ */
+
+package io.github.dsheirer.module.decode.p25.phase1;
+
+import io.github.dsheirer.dsp.filter.interpolator.LinearInterpolator;
+import io.github.dsheirer.dsp.symbol.Dibit;
+import io.github.dsheirer.dsp.symbol.DibitToByteBufferAssembler;
+import io.github.dsheirer.module.decode.FeedbackDecoder;
+import io.github.dsheirer.sample.Listener;
+import java.nio.ByteBuffer;
+import java.util.Arrays;
+
+/**
+ * P25 Phase 1 LSM v2 demodulator with improved cold-start handling for conventional (PTT) channels.
+ *
+ * Improvements over P25P1DemodulatorLSM:
+ * - Transmission boundary detection via sample energy monitoring
+ * - Cold-start reset of differential state (previousSymbol zeroed, first symbol skipped)
+ * - Adaptive PLL gain (acquisition mode → tracking mode)
+ * - Fast AGC convergence during cold-start
+ * - Gardner TED suppression for first 2 symbols after reset
+ */
+public class P25P1DemodulatorLSMv2
+{
+    private static final float HALF_PI = (float)(Math.PI / 2.0);
+    private static final float TWO_PI = (float)(Math.PI * 2.0);
+    private static final float MAX_PLL = (float)(Math.PI / 3.0); //+/- 800 Hz
+    private static final float OBJECTIVE_MAGNITUDE = 1.0f;
+    private static final int SYMBOL_RATE = 4800;
+
+    // Adaptive PLL parameters
+    private static final float PLL_GAIN_ACQUISITION = 0.25f;
+    private static final float PLL_GAIN_TRACKING = 0.05f;
+    private static final int PLL_ACQUISITION_SYMBOLS = 50;
+
+    // Fast AGC parameters
+    private static final float AGC_GAIN_FAST = 0.2f;
+    private static final float AGC_GAIN_NORMAL = 0.05f;
+    private static final int AGC_FAST_SYMBOLS = 20;
+
+    // Gardner TED suppression
+    private static final int TED_SUPPRESSION_SYMBOLS = 2;
+
+    // Transmission boundary detection
+    private static final float ENERGY_THRESHOLD = 0.001f;
+    private static final int SILENCE_SAMPLES_THRESHOLD = 960; // ~200ms at 4800 sym/sec
+
+    private final DibitToByteBufferAssembler mDibitAssembler = new DibitToByteBufferAssembler(300);
+    private final FeedbackDecoder mFeedbackDecoder;
+    private final P25P1MessageFramer mMessageFramer;
+    private double mSamplePoint;
+    private double mSamplesPerSymbol;
+    private double mSamplesPerHalfSymbol;
+    private float[] mBufferI;
+    private float[] mBufferQ;
+    private float mPLL = 0f;
+    private float mSampleGain = 1f;
+    private float mPreviousMiddleI, mPreviousMiddleQ, mPreviousCurrentI, mPreviousCurrentQ;
+    private float mPreviousSymbolI = 0f, mPreviousSymbolQ = 0f;
+    private int mBufferPointer;
+    private int mBufferReserve;
+
+    // Cold-start state tracking
+    private int mSymbolsSinceReset = 0;
+    private boolean mFirstSymbolAfterReset = true;
+
+    // Transmission boundary detection state
+    private int mSilenceSampleCount = 0;
+    private boolean mInSilence = true;
+    private float mEnergyAverage = 0f;
+
+    /**
+     * Constructs an instance
+     * @param messageFramer for receiving demodulated symbol stream and providing sync detection events.
+     * @param feedbackDecoder (parent) for receiving PLL carrier offset error reports.
+     */
+    public P25P1DemodulatorLSMv2(P25P1MessageFramer messageFramer, FeedbackDecoder feedbackDecoder)
+    {
+        mMessageFramer = messageFramer;
+        mFeedbackDecoder = feedbackDecoder;
+    }
+
+    /**
+     * Reset the PLL when the tuner source either changes center frequency or adjusts the PPM value.
+     */
+    public void resetPLL()
+    {
+        mPLL = 0f;
+    }
+
+    /**
+     * Performs a cold-start reset of all demodulator state. Called when a transmission boundary is detected.
+     */
+    private void coldStartReset()
+    {
+        mPLL = 0f;
+        mSampleGain = 1.0f;
+        mPreviousSymbolI = 0f;
+        mPreviousSymbolQ = 0f;
+        mPreviousMiddleI = 0f;
+        mPreviousMiddleQ = 0f;
+        mPreviousCurrentI = 0f;
+        mPreviousCurrentQ = 0f;
+        mSymbolsSinceReset = 0;
+        mFirstSymbolAfterReset = true;
+    }
+
+    /**
+     * Primary input method for receiving a stream of filtered, pulse-shaped samples to process into symbols.
+     * @param i inphase samples to process
+     * @param q quadrature samples to process
+     */
+    public void process(float[] i, float[] q)
+    {
+        // Check for transmission boundary before processing symbols
+        detectTransmissionBoundary(i, q);
+
+        //Shadow copy heap member variables onto the stack
+        double samplePoint = mSamplePoint;
+        double samplesPerSymbol = mSamplesPerSymbol;
+        double samplesPerHalfSymbol = mSamplesPerHalfSymbol;
+        float pll = mPLL;
+        float previousSymbolI = mPreviousSymbolI;
+        float previousSymbolQ = mPreviousSymbolQ;
+        float previousMiddleI = mPreviousMiddleI;
+        float previousMiddleQ = mPreviousMiddleQ;
+        float previousCurrentI = mPreviousCurrentI;
+        float previousCurrentQ = mPreviousCurrentQ;
+        float sampleGain = mSampleGain;
+        int bufferPointer = mBufferPointer;
+        int symbolsSinceReset = mSymbolsSinceReset;
+        boolean firstSymbolAfterReset = mFirstSymbolAfterReset;
+
+        double tedGain = samplesPerSymbol / 4;
+        double maxTimingAdjustment = samplesPerSymbol / 25;
+        double pointer, residual, timingAdjustment;
+        float magnitude, phaseError = 0, requiredGain, softSymbol, pllI, pllQ, pllTemp;
+        float iMiddle, qMiddle, iCurrent, qCurrent, iMiddleDemodulated, qMiddleDemodulated, iSymbol, qSymbol;
+        float pllGain, agcGain;
+        int offset;
+        Dibit hardSymbol;
+
+        //I/Q buffers are the same length as incoming samples padded by an extra symbol length for processing space.
+        int bufferReserve = mBufferReserve;
+        int requiredLength = i.length + bufferReserve;
+
+        if(mBufferI.length != requiredLength)
+        {
+            mBufferI = Arrays.copyOf(mBufferI, requiredLength);
+            mBufferQ = Arrays.copyOf(mBufferQ, requiredLength);
+        }
+
+        //Transfer extra reserve samples from last processing iteration to the front of the I/Q buffers
+        System.arraycopy(mBufferI, bufferPointer, mBufferI, 0, bufferReserve);
+        System.arraycopy(mBufferQ, bufferPointer, mBufferQ, 0, bufferReserve);
+
+        //Copy incoming I/Q samples to the processing buffers
+        System.arraycopy(i, 0, mBufferI, bufferReserve, i.length);
+        System.arraycopy(q, 0, mBufferQ, bufferReserve, q.length);
+        bufferPointer = 0;
+        int bufferReload = mBufferI.length - bufferReserve;
+
+        while(bufferPointer < bufferReload)
+        {
+            bufferPointer++;
+            samplePoint--;
+
+            if(samplePoint < 1)
+            {
+                //Sample point is the middle sample, between the previous and current symbols.
+                iMiddle = LinearInterpolator.calculate(mBufferI[bufferPointer], mBufferI[bufferPointer + 1], samplePoint);
+                qMiddle = LinearInterpolator.calculate(mBufferQ[bufferPointer], mBufferQ[bufferPointer + 1], samplePoint);
+
+                //Calculate offset to next symbol.
+                pointer = bufferPointer + samplePoint + samplesPerHalfSymbol;
+                offset = (int)Math.floor(pointer);
+                residual = pointer - offset;
+                iCurrent = LinearInterpolator.calculate(mBufferI[offset], mBufferI[offset + 1], residual);
+                qCurrent = LinearInterpolator.calculate(mBufferQ[offset], mBufferQ[offset + 1], residual);
+
+                // Select adaptive AGC gain based on symbols since reset
+                agcGain = (symbolsSinceReset < AGC_FAST_SYMBOLS) ? AGC_GAIN_FAST : AGC_GAIN_NORMAL;
+
+                //Adjust sample gain based on highest magnitude and apply to both middle and current samples.
+                magnitude = (float)(Math.sqrt(Math.pow(iCurrent, 2.0) + Math.pow(qCurrent, 2.0)));
+
+                if(magnitude > 0 && !Float.isInfinite(magnitude))
+                {
+                    requiredGain = constrain(OBJECTIVE_MAGNITUDE / magnitude, 500);
+                    sampleGain += (requiredGain - sampleGain) * agcGain;
+                    sampleGain = Math.min(sampleGain, requiredGain);
+                    sampleGain = Math.min(sampleGain, 500);
+                }
+
+                //Apply gain to the samples
+                iMiddle *= sampleGain;
+                qMiddle *= sampleGain;
+                iCurrent *= sampleGain;
+                qCurrent *= sampleGain;
+
+                // Skip differential demodulation on the very first symbol after reset (previous state is zero/invalid)
+                if(firstSymbolAfterReset)
+                {
+                    firstSymbolAfterReset = false;
+                    previousSymbolI = iCurrent;
+                    previousSymbolQ = qCurrent;
+                    previousMiddleI = iMiddle;
+                    previousMiddleQ = qMiddle;
+                    previousCurrentI = iCurrent;
+                    previousCurrentQ = qCurrent;
+                    samplePoint += samplesPerSymbol;
+                    symbolsSinceReset++;
+                    continue;
+                }
+
+                //Create I/Q representation of current PLL state
+                pllI = (float)Math.cos(pll);
+                pllQ = (float)Math.sin(pll);
+
+                //Differential demodulation of middle sample
+                iMiddleDemodulated = (previousMiddleI * iMiddle) - (-previousMiddleQ * qMiddle);
+                qMiddleDemodulated = (previousMiddleI * qMiddle) + (-previousMiddleQ * iMiddle);
+
+                //Rotate middle sample by the PLL offset
+                pllTemp = (iMiddleDemodulated * pllI) - (qMiddleDemodulated * pllQ);
+                qMiddleDemodulated = (qMiddleDemodulated * pllI) + (iMiddleDemodulated * pllQ);
+                iMiddleDemodulated = pllTemp;
+
+                //Differential demodulation of symbol
+                iSymbol = (previousCurrentI * iCurrent) - (-previousCurrentQ * qCurrent);
+                qSymbol = (previousCurrentI * qCurrent) + (-previousCurrentQ * iCurrent);
+
+                //Rotate symbol by the PLL offset
+                pllTemp = (iSymbol * pllI) - (qSymbol * pllQ);
+                qSymbol = (qSymbol * pllI) + (iSymbol * pllQ);
+                iSymbol = pllTemp;
+
+                //Calculate the symbol (radians) from the I/Q values
+                softSymbol = (float)Math.atan2(qSymbol, iSymbol);
+
+                //Apply Gardner timing error detection — suppress for first TED_SUPPRESSION_SYMBOLS after reset
+                if(symbolsSinceReset >= TED_SUPPRESSION_SYMBOLS)
+                {
+                    timingAdjustment = ((previousSymbolI - iSymbol) * iMiddleDemodulated) +
+                            ((previousSymbolQ - qSymbol) * qMiddleDemodulated);
+                    timingAdjustment = constrain(timingAdjustment, maxTimingAdjustment);
+                    timingAdjustment *= tedGain;
+                    samplePoint += timingAdjustment;
+                }
+
+                // Select adaptive PLL gain based on symbols since reset
+                pllGain = (symbolsSinceReset < PLL_ACQUISITION_SYMBOLS) ? PLL_GAIN_ACQUISITION : PLL_GAIN_TRACKING;
+
+                //Phase Locked Loop adjustment
+                if(softSymbol != 0)
+                {
+                    hardSymbol = toDibit(softSymbol);
+                    phaseError = constrain(softSymbol - hardSymbol.getIdealPhase(), .3f);
+                    pll -= (phaseError * pllGain);
+                    pll = constrain(pll, MAX_PLL);
+                }
+                else
+                {
+                    hardSymbol = Dibit.D00_PLUS_1;
+                }
+
+                //Message framer returns boolean if valid sync and NID were detected/decoded.
+                if(mMessageFramer.processWithSoftSyncDetect(softSymbol, hardSymbol))
+                {
+                    mFeedbackDecoder.processPLLError(pll, SYMBOL_RATE);
+                }
+
+                mDibitAssembler.receive(hardSymbol);
+                mFeedbackDecoder.broadcast(softSymbol);
+
+                //Shuffle the values
+                previousSymbolI = iSymbol;
+                previousSymbolQ = qSymbol;
+                previousMiddleI = iMiddle;
+                previousMiddleQ = qMiddle;
+                previousCurrentI = iCurrent;
+                previousCurrentQ = qCurrent;
+
+                //Add another symbol's worth of samples to the counter
+                samplePoint += samplesPerSymbol;
+                symbolsSinceReset++;
+            }
+        }
+
+        //Copy shadow variables back to member variables.
+        mPLL = pll;
+        mBufferPointer = bufferPointer;
+        mPreviousMiddleI = previousMiddleI;
+        mPreviousMiddleQ = previousMiddleQ;
+        mPreviousCurrentI = previousCurrentI;
+        mPreviousCurrentQ = previousCurrentQ;
+        mPreviousSymbolI = previousSymbolI;
+        mPreviousSymbolQ = previousSymbolQ;
+        mSampleGain = sampleGain;
+        mSamplePoint = samplePoint;
+        mSymbolsSinceReset = symbolsSinceReset;
+        mFirstSymbolAfterReset = firstSymbolAfterReset;
+    }
+
+    /**
+     * Monitors incoming sample energy to detect transmission boundaries. When samples have been below
+     * the energy threshold for SILENCE_SAMPLES_THRESHOLD samples and then rise above, triggers a cold-start reset.
+     */
+    private void detectTransmissionBoundary(float[] i, float[] q)
+    {
+        for(int idx = 0; idx < i.length; idx++)
+        {
+            float energy = (i[idx] * i[idx]) + (q[idx] * q[idx]);
+            mEnergyAverage += (energy - mEnergyAverage) * 0.01f;
+
+            if(mEnergyAverage < ENERGY_THRESHOLD)
+            {
+                mSilenceSampleCount++;
+                if(mSilenceSampleCount >= SILENCE_SAMPLES_THRESHOLD)
+                {
+                    mInSilence = true;
+                }
+            }
+            else
+            {
+                if(mInSilence)
+                {
+                    // Transition from silence to signal — new transmission starting
+                    coldStartReset();
+                    mInSilence = false;
+                }
+                mSilenceSampleCount = 0;
+            }
+        }
+    }
+
+    /**
+     * Constrains value to range: -constraint to constraint
+     */
+    private static double constrain(double value, double constraint)
+    {
+        if(Double.isNaN(value) || Double.isInfinite(value))
+        {
+            return 0.0;
+        }
+        else if(value > constraint)
+        {
+            return constraint;
+        }
+
+        return Math.max(value, -constraint);
+    }
+
+    /**
+     * Constrains value to range: -constraint to constraint
+     */
+    private static float constrain(float value, float constraint)
+    {
+        if(Float.isNaN(value) || Float.isInfinite(value))
+        {
+            return 0.0f;
+        }
+
+        if(value > constraint)
+        {
+            return constraint;
+        }
+
+        return Math.max(value, -constraint);
+    }
+
+    /**
+     * Sets or updates the samples per symbol
+     * @param samplesPerSymbol to apply.
+     */
+    public void setSamplesPerSymbol(float samplesPerSymbol)
+    {
+        mSamplesPerSymbol = samplesPerSymbol;
+        mSamplesPerHalfSymbol = samplesPerSymbol / 2.0f;
+        mSamplePoint = samplesPerSymbol;
+        mBufferReserve = (int)Math.ceil(samplesPerSymbol);
+        mBufferI = new float[mBufferReserve];
+        mBufferQ = new float[mBufferReserve];
+        mBufferPointer = 0;
+
+        // Calculate silence threshold based on actual sample rate
+        // 200ms * (samplesPerSymbol * symbolRate) = samples for 200ms
+        // But SILENCE_SAMPLES_THRESHOLD is already set for ~200ms at the decimated rate
+    }
+
+    /**
+     * Registers the listener to receive demodulated bit stream buffers.
+     * @param listener to register
+     */
+    public void setBufferListener(Listener<ByteBuffer> listener)
+    {
+        mDibitAssembler.setBufferListener(listener);
+    }
+
+    /**
+     * Indicates if there is a registered buffer listener
+     */
+    public boolean hasBufferListener()
+    {
+        return mDibitAssembler.hasBufferListeners();
+    }
+
+    /**
+     * Decodes the sample value to determine the correct QPSK quadrant and maps the value to a Dibit symbol.
+     * @param softSymbol in radians.
+     * @return symbol decision.
+     */
+    public static Dibit toDibit(float softSymbol)
+    {
+        if(softSymbol > 0)
+        {
+            return softSymbol > HALF_PI ? Dibit.D01_PLUS_3 : Dibit.D00_PLUS_1;
+        }
+        else
+        {
+            return softSymbol < -HALF_PI ? Dibit.D11_MINUS_3 : Dibit.D10_MINUS_1;
+        }
+    }
+}

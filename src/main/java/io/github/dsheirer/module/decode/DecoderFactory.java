@@ -87,6 +87,7 @@ import io.github.dsheirer.module.decode.p25.audio.P25P2AudioModule;
 import io.github.dsheirer.module.decode.p25.phase1.DecodeConfigP25Phase1;
 import io.github.dsheirer.module.decode.p25.phase1.P25P1DecoderC4FM;
 import io.github.dsheirer.module.decode.p25.phase1.P25P1DecoderLSM;
+import io.github.dsheirer.module.decode.p25.phase1.P25P1DecoderLSMv2;
 import io.github.dsheirer.module.decode.p25.phase1.P25P1DecoderState;
 import io.github.dsheirer.module.decode.p25.phase1.message.filter.P25P1MessageFilterSet;
 import io.github.dsheirer.module.decode.p25.phase2.DecodeConfigP25Phase2;
@@ -279,6 +280,9 @@ public class DecoderFactory
                     break;
                 case CQPSK:
                     modules.add(new P25P1DecoderLSM());
+                    break;
+                case CQPSK_V2:
+                    modules.add(new P25P1DecoderLSMv2());
                     break;
                 default:
                     throw new IllegalArgumentException("Unrecognized P25 Phase 1 Modulation [" + p1.getModulation() + "]");

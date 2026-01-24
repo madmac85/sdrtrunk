@@ -74,6 +74,7 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
     private SegmentedButton mModulationSegmentedButton;
     private ToggleButton mC4FMToggleButton;
     private ToggleButton mLSMToggleButton;
+    private ToggleButton mLSMv2ToggleButton;
 
     /**
      * Constructs an instance
@@ -145,7 +146,7 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
             GridPane.setConstraints(directionLabel, 5, 0);
             gridPane.getChildren().add(directionLabel);
 
-            Label modulationHelpLabel = new Label("C4FM: repeaters and non-simulcast trunked systems.  LSM: simulcast trunked systems.");
+            Label modulationHelpLabel = new Label("C4FM: repeaters and non-simulcast trunked.  LSM: simulcast trunked.  LSM v2: conventional (PTT) CQPSK channels.");
             GridPane.setConstraints(modulationHelpLabel, 0, 1, 6, 1);
             gridPane.getChildren().add(modulationHelpLabel);
 
@@ -227,7 +228,7 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
         {
             mModulationSegmentedButton = new SegmentedButton();
             mModulationSegmentedButton.getStyleClass().add(SegmentedButton.STYLE_CLASS_DARK);
-            mModulationSegmentedButton.getButtons().addAll(getC4FMToggleButton(), getLSMToggleButton());
+            mModulationSegmentedButton.getButtons().addAll(getC4FMToggleButton(), getLSMToggleButton(), getLSMv2ToggleButton());
             mModulationSegmentedButton.getToggleGroup().selectedToggleProperty().addListener(new ChangeListener<Toggle>()
             {
                 @Override
@@ -268,6 +269,17 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
         }
 
         return mLSMToggleButton;
+    }
+
+    private ToggleButton getLSMv2ToggleButton()
+    {
+        if(mLSMv2ToggleButton == null)
+        {
+            mLSMv2ToggleButton = new ToggleButton("LSM v2");
+            mLSMv2ToggleButton.setTooltip(new Tooltip("LSM v2: improved cold-start for conventional (PTT) channels"));
+        }
+
+        return mLSMv2ToggleButton;
     }
 
     private ToggleSwitch getIgnoreDataCallsButton()
@@ -332,15 +344,20 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
             DecodeConfigP25Phase1 decodeConfig = (DecodeConfigP25Phase1)config;
             getIgnoreDataCallsButton().setSelected(decodeConfig.getIgnoreDataCalls());
             getTrafficChannelPoolSizeSpinner().getValueFactory().setValue(decodeConfig.getTrafficChannelPoolSize());
-            if(decodeConfig.getModulation() == Modulation.C4FM)
+            getC4FMToggleButton().setSelected(false);
+            getLSMToggleButton().setSelected(false);
+            getLSMv2ToggleButton().setSelected(false);
+            switch(decodeConfig.getModulation())
             {
-                getC4FMToggleButton().setSelected(true);
-                getLSMToggleButton().setSelected(false);
-            }
-            else
-            {
-                getC4FMToggleButton().setSelected(false);
-                getLSMToggleButton().setSelected(true);
+                case C4FM:
+                    getC4FMToggleButton().setSelected(true);
+                    break;
+                case CQPSK_V2:
+                    getLSMv2ToggleButton().setSelected(true);
+                    break;
+                default:
+                    getLSMToggleButton().setSelected(true);
+                    break;
             }
         }
         else
@@ -366,7 +383,20 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
 
         config.setIgnoreDataCalls(getIgnoreDataCallsButton().isSelected());
         config.setTrafficChannelPoolSize(getTrafficChannelPoolSizeSpinner().getValue());
-        config.setModulation(getC4FMToggleButton().isSelected() ? Modulation.C4FM : Modulation.CQPSK);
+
+        if(getC4FMToggleButton().isSelected())
+        {
+            config.setModulation(Modulation.C4FM);
+        }
+        else if(getLSMv2ToggleButton().isSelected())
+        {
+            config.setModulation(Modulation.CQPSK_V2);
+        }
+        else
+        {
+            config.setModulation(Modulation.CQPSK);
+        }
+
         getItem().setDecodeConfiguration(config);
     }
 

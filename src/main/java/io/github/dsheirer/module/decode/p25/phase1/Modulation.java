@@ -25,6 +25,7 @@ package io.github.dsheirer.module.decode.p25.phase1;
 public enum Modulation
 {
     CQPSK("Simulcast (LSM)"),
+    CQPSK_V2("Conventional (LSM v2)"),
     C4FM("Normal (C4FM)");
 
     private final String mLabel;
