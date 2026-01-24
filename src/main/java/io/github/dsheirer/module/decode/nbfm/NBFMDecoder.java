@@ -31,6 +31,8 @@ import io.github.dsheirer.dsp.filter.fir.real.IRealFilter;
 import io.github.dsheirer.dsp.filter.resample.RealResampler;
 import io.github.dsheirer.dsp.fm.FmDemodulatorFactory;
 import io.github.dsheirer.dsp.fm.IDemodulator;
+import io.github.dsheirer.dsp.squelch.CTCSSDetector;
+import io.github.dsheirer.dsp.squelch.CTCSSFrequency;
 import io.github.dsheirer.dsp.squelch.INoiseSquelchController;
 import io.github.dsheirer.dsp.squelch.NoiseSquelch;
 import io.github.dsheirer.dsp.squelch.NoiseSquelchState;
@@ -59,6 +61,7 @@ public class NBFMDecoder extends SquelchControlDecoder implements ISourceEventLi
     private final IDemodulator mDemodulator = FmDemodulatorFactory.getFmDemodulator();
     private final SourceEventProcessor mSourceEventProcessor = new SourceEventProcessor();
     private final NoiseSquelch mNoiseSquelch;
+    private final CTCSSDetector mCTCSSDetector;
     private IRealFilter mIBasebandFilter;
     private IRealFilter mQBasebandFilter;
     private IRealDecimationFilter mIDecimationFilter;
@@ -82,10 +85,25 @@ public class NBFMDecoder extends SquelchControlDecoder implements ISourceEventLi
         mNoiseSquelch = new NoiseSquelch(config.getSquelchNoiseOpenThreshold(), config.getSquelchNoiseCloseThreshold(),
                 config.getSquelchHysteresisOpenThreshold(), config.getSquelchHysteresisCloseThreshold());
 
+        //Setup CTCSS detector if a tone is configured
+        CTCSSFrequency ctcssFrequency = config.getCTCSSFrequency();
+        if(ctcssFrequency != null && ctcssFrequency != CTCSSFrequency.NONE)
+        {
+            mCTCSSDetector = new CTCSSDetector(ctcssFrequency.getFrequency());
+        }
+        else
+        {
+            mCTCSSDetector = null;
+        }
+
         //Send squelch controlled audio to the resampler and notify the decoder state that the call continues.
+        //When CTCSS is configured, only pass audio when the tone is detected.
         mNoiseSquelch.setAudioListener(audio -> {
-            mResampler.resample(audio);
-            notifyCallContinuation();
+            if(mCTCSSDetector == null || mCTCSSDetector.isToneDetected())
+            {
+                mResampler.resample(audio);
+                notifyCallContinuation();
+            }
         });
 
         //Notify the decoder state of call starts and ends
@@ -96,7 +114,11 @@ public class NBFMDecoder extends SquelchControlDecoder implements ISourceEventLi
             }
             else
             {
-                notifyCallStart();
+                //When CTCSS is configured, only notify call start if tone is detected
+                if(mCTCSSDetector == null || mCTCSSDetector.isToneDetected())
+                {
+                    notifyCallStart();
+                }
             }
         });
     }
@@ -252,6 +274,13 @@ public class NBFMDecoder extends SquelchControlDecoder implements ISourceEventLi
 
         float[] demodulated = mDemodulator.demodulate(filteredI, filteredQ);
 
+        //Feed demodulated audio to CTCSS detector before noise squelch (tone is sub-audible and would be
+        //removed by the noise squelch's high-pass filter)
+        if(mCTCSSDetector != null)
+        {
+            mCTCSSDetector.process(demodulated);
+        }
+
         mNoiseSquelch.process(demodulated);
 
         //Once we process the sample buffer, if the ending state is squelch closed, update the decoder state that we
@@ -356,6 +385,11 @@ public class NBFMDecoder extends SquelchControlDecoder implements ISourceEventLi
         }
 
         mNoiseSquelch.setSampleRate(decimatedSampleRate);
+
+        if(mCTCSSDetector != null)
+        {
+            mCTCSSDetector.setSampleRate(decimatedSampleRate);
+        }
 
         int passBandStop = (int) (mChannelBandwidth * .8);
         int stopBandStart = (int) mChannelBandwidth;

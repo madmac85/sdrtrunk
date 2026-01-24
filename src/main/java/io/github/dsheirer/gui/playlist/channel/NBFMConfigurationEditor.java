@@ -19,6 +19,7 @@
 
 package io.github.dsheirer.gui.playlist.channel;
 
+import io.github.dsheirer.dsp.squelch.CTCSSFrequency;
 import io.github.dsheirer.gui.control.HexFormatter;
 import io.github.dsheirer.gui.control.IntegerFormatter;
 import io.github.dsheirer.gui.playlist.decoder.AuxDecoderConfigurationEditor;
@@ -43,9 +44,11 @@ import java.util.ArrayList;
 import java.util.List;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
+import javafx.collections.FXCollections;
 import javafx.collections.ListChangeListener;
 import javafx.geometry.HPos;
 import javafx.geometry.Insets;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextFormatter;
@@ -70,6 +73,7 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
     private TitledPane mSourcePane;
     private TextField mTalkgroupField;
     private ToggleSwitch mAudioFilterEnable;
+    private ComboBox<CTCSSFrequency> mCTCSSComboBox;
     private TextFormatter<Integer> mTalkgroupTextFormatter;
     private ToggleSwitch mBasebandRecordSwitch;
     private SegmentedButton mBandwidthButton;
@@ -146,6 +150,14 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
 
             GridPane.setConstraints(getAudioFilterEnable(), 2, 1);
             gridPane.getChildren().add(getAudioFilterEnable());
+
+            Label ctcssLabel = new Label("PL Tone (CTCSS)");
+            GridPane.setHalignment(ctcssLabel, HPos.RIGHT);
+            GridPane.setConstraints(ctcssLabel, 0, 2);
+            gridPane.getChildren().add(ctcssLabel);
+
+            GridPane.setConstraints(getCTCSSComboBox(), 1, 2);
+            gridPane.getChildren().add(getCTCSSComboBox());
 
             mDecoderPane.setContent(gridPane);
 
@@ -268,6 +280,25 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
         }
 
         return mAudioFilterEnable;
+    }
+
+    /**
+     * ComboBox for selecting the CTCSS (PL) tone frequency for tone-gated squelch.
+     * @return combo box
+     */
+    private ComboBox<CTCSSFrequency> getCTCSSComboBox()
+    {
+        if(mCTCSSComboBox == null)
+        {
+            mCTCSSComboBox = new ComboBox<>(FXCollections.observableArrayList(CTCSSFrequency.values()));
+            mCTCSSComboBox.setTooltip(new Tooltip("PL (CTCSS) tone - squelch opens only when this tone is detected"));
+            mCTCSSComboBox.getSelectionModel().select(CTCSSFrequency.NONE);
+            mCTCSSComboBox.setDisable(true);
+            mCTCSSComboBox.getSelectionModel().selectedItemProperty()
+                .addListener((observable, oldValue, newValue) -> modifiedProperty().set(true));
+        }
+
+        return mCTCSSComboBox;
     }
 
     private SegmentedButton getBandwidthButton()
@@ -412,6 +443,9 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
             updateTextFormatter(decodeConfigNBFM.getTalkgroup());
             getAudioFilterEnable().setDisable(false);
             getAudioFilterEnable().setSelected(decodeConfigNBFM.isAudioFilter());
+            getCTCSSComboBox().setDisable(false);
+            CTCSSFrequency ctcss = decodeConfigNBFM.getCTCSSFrequency();
+            getCTCSSComboBox().getSelectionModel().select(ctcss != null ? ctcss : CTCSSFrequency.NONE);
         }
         else
         {
@@ -426,6 +460,8 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
             getTalkgroupField().setDisable(true);
             getAudioFilterEnable().setDisable(true);
             getAudioFilterEnable().setSelected(false);
+            getCTCSSComboBox().setDisable(true);
+            getCTCSSComboBox().getSelectionModel().select(CTCSSFrequency.NONE);
         }
     }
 
@@ -461,6 +497,10 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
 
         config.setTalkgroup(talkgroup);
         config.setAudioFilter(getAudioFilterEnable().isSelected());
+
+        CTCSSFrequency selectedCTCSS = getCTCSSComboBox().getSelectionModel().getSelectedItem();
+        config.setCTCSSFrequency(selectedCTCSS != null ? selectedCTCSS : CTCSSFrequency.NONE);
+
         getItem().setDecodeConfiguration(config);
     }
 

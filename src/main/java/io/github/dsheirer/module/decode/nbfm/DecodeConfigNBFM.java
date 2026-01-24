@@ -20,6 +20,7 @@ package io.github.dsheirer.module.decode.nbfm;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
+import io.github.dsheirer.dsp.squelch.CTCSSFrequency;
 import io.github.dsheirer.dsp.squelch.NoiseSquelch;
 import io.github.dsheirer.module.decode.DecoderType;
 import io.github.dsheirer.module.decode.analog.DecodeConfigAnalog;
@@ -31,6 +32,7 @@ import io.github.dsheirer.source.tuner.channel.ChannelSpecification;
 public class DecodeConfigNBFM extends DecodeConfigAnalog
 {
     private boolean mAudioFilter = true;
+    private CTCSSFrequency mCTCSSFrequency = CTCSSFrequency.NONE;
     private float mSquelchNoiseOpenThreshold = NoiseSquelch.DEFAULT_NOISE_OPEN_THRESHOLD;
     private float mSquelchNoiseCloseThreshold = NoiseSquelch.DEFAULT_NOISE_CLOSE_THRESHOLD;
     private int mSquelchHysteresisOpenThreshold = NoiseSquelch.DEFAULT_HYSTERESIS_OPEN_THRESHOLD;
@@ -92,6 +94,26 @@ public class DecodeConfigNBFM extends DecodeConfigAnalog
     public void setAudioFilter(boolean audioFilter)
     {
         mAudioFilter = audioFilter;
+    }
+
+    /**
+     * CTCSS (PL) tone frequency for tone-gated squelch. When set to a value other than NONE, the squelch will
+     * only open when both the noise threshold is met and the specified CTCSS tone is detected.
+     * @return configured CTCSS frequency, defaults to NONE (no tone filtering).
+     */
+    @JacksonXmlProperty(isAttribute = true, localName = "ctcssFrequency")
+    public CTCSSFrequency getCTCSSFrequency()
+    {
+        return mCTCSSFrequency;
+    }
+
+    /**
+     * Sets the CTCSS (PL) tone frequency for tone-gated squelch.
+     * @param ctcssFrequency to require for squelch open, or NONE to disable tone filtering.
+     */
+    public void setCTCSSFrequency(CTCSSFrequency ctcssFrequency)
+    {
+        mCTCSSFrequency = (ctcssFrequency != null) ? ctcssFrequency : CTCSSFrequency.NONE;
     }
 
     /**
