@@ -78,6 +78,7 @@ public enum DecodeEventType
     SMS("SMS"),
     STATION_ID("Station ID"),
     STATUS("Status"),
+    TONE_DETECT("Tone Detect"),
     TEXT_MESSAGE("Text Message"),
     UDP_PACKET("UDP/IP Packet"),
     UNKNOWN_PACKET("Unknown Packet"),
@@ -116,7 +117,7 @@ public enum DecodeEventType
     public static final EnumSet<DecodeEventType> DATA_CALLS = EnumSet.of(DecodeEventType.DATA_CALL,
             DecodeEventType.DATA_CALL_ENCRYPTED, DecodeEventType.DATA_PACKET, DecodeEventType.GPS,
             DecodeEventType.IP_PACKET, DecodeEventType.UDP_PACKET, DecodeEventType.SDM, DecodeEventType.ID_ANI,
-            DecodeEventType.ID_UNIQUE);
+            DecodeEventType.ID_UNIQUE, DecodeEventType.TONE_DETECT);
 
     /**
      * Registration event types for filtering

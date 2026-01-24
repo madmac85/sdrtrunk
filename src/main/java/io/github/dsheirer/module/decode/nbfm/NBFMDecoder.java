@@ -90,6 +90,7 @@ public class NBFMDecoder extends SquelchControlDecoder implements ISourceEventLi
         if(ctcssFrequency != null && ctcssFrequency != CTCSSFrequency.NONE)
         {
             mCTCSSDetector = new CTCSSDetector(ctcssFrequency.getFrequency());
+            mCTCSSDetector.setToneDetectedListener(this::notifyToneDetected);
         }
         else
         {
@@ -313,6 +314,14 @@ public class NBFMDecoder extends SquelchControlDecoder implements ISourceEventLi
     private void notifyCallEnd()
     {
         broadcast(new DecoderStateEvent(this, DecoderStateEvent.Event.END, State.CALL, 0));
+    }
+
+    /**
+     * Broadcasts a tone detected state event
+     */
+    private void notifyToneDetected()
+    {
+        broadcast(new DecoderStateEvent(this, DecoderStateEvent.Event.DECODE, State.CALL, 0));
     }
 
     /**

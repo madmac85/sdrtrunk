@@ -19,13 +19,19 @@
 
 package io.github.dsheirer.module.decode.nbfm;
 
+import io.github.dsheirer.channel.state.DecoderStateEvent;
+import io.github.dsheirer.dsp.squelch.CTCSSFrequency;
 import io.github.dsheirer.identifier.Form;
 import io.github.dsheirer.identifier.Identifier;
 import io.github.dsheirer.identifier.IdentifierClass;
+import io.github.dsheirer.identifier.IdentifierCollection;
 import io.github.dsheirer.identifier.Role;
 import io.github.dsheirer.identifier.string.SimpleStringIdentifier;
 import io.github.dsheirer.module.decode.DecoderType;
 import io.github.dsheirer.module.decode.analog.AnalogDecoderState;
+import io.github.dsheirer.module.decode.event.DecodeEvent;
+import io.github.dsheirer.module.decode.event.DecodeEventType;
+import io.github.dsheirer.protocol.Protocol;
 
 /**
  * NBFM decoder state
@@ -35,6 +41,7 @@ public class NBFMDecoderState extends AnalogDecoderState
     private String mChannelName;
     private Identifier mChannelNameIdentifier;
     private Identifier mTalkgroupIdentifier;
+    private CTCSSFrequency mCTCSSFrequency;
 
     /**
      * Constructs an instance
@@ -46,6 +53,24 @@ public class NBFMDecoderState extends AnalogDecoderState
         mChannelName = (channelName != null && !channelName.isEmpty()) ? channelName : "NBFM CHANNEL";
         mChannelNameIdentifier = new SimpleStringIdentifier(mChannelName, IdentifierClass.CONFIGURATION, Form.CHANNEL_NAME, Role.ANY);
         mTalkgroupIdentifier = new NBFMTalkgroup(decodeConfig.getTalkgroup());
+        mCTCSSFrequency = decodeConfig.getCTCSSFrequency();
+    }
+
+    @Override
+    public void receiveDecoderStateEvent(DecoderStateEvent event)
+    {
+        super.receiveDecoderStateEvent(event);
+
+        if(event.getEvent() == DecoderStateEvent.Event.DECODE && mCTCSSFrequency != null &&
+                mCTCSSFrequency != CTCSSFrequency.NONE)
+        {
+            DecodeEvent toneEvent = DecodeEvent.builder(DecodeEventType.TONE_DETECT, System.currentTimeMillis())
+                    .details("CTCSS " + mCTCSSFrequency.toString())
+                    .identifiers(new IdentifierCollection(getIdentifierCollection().getIdentifiers()))
+                    .protocol(Protocol.NBFM)
+                    .build();
+            broadcast(toneEvent);
+        }
     }
 
     @Override
