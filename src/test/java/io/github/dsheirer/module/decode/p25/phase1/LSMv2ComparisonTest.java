@@ -20,6 +20,7 @@ package io.github.dsheirer.module.decode.p25.phase1;
 
 import io.github.dsheirer.message.IMessage;
 import io.github.dsheirer.message.SyncLossMessage;
+import io.github.dsheirer.module.decode.p25.phase1.P25P1DataUnitID;
 import io.github.dsheirer.module.decode.p25.phase1.message.P25P1Message;
 import io.github.dsheirer.sample.Listener;
 import io.github.dsheirer.sample.complex.ComplexSamples;
@@ -81,6 +82,12 @@ public class LSMv2ComparisonTest
         System.out.println(String.format("%-25s %10d %10d %+10d", "Sync Losses",
                 lsmStats.syncLosses, lsmV2Stats.syncLosses,
                 lsmV2Stats.syncLosses - lsmStats.syncLosses));
+        System.out.println(String.format("%-25s %10d %10d %+10d", "LDU Frames",
+                lsmStats.lduCount, lsmV2Stats.lduCount,
+                lsmV2Stats.lduCount - lsmStats.lduCount));
+        System.out.println(String.format("%-25s %9.1fs %9.1fs %+9.1fs", "Audio (LDU×180ms)",
+                lsmStats.lduCount * 0.18, lsmV2Stats.lduCount * 0.18,
+                (lsmV2Stats.lduCount - lsmStats.lduCount) * 0.18));
         System.out.println(String.format("%-25s %10d %10d %+10d", "Bit Errors",
                 lsmStats.bitErrors, lsmV2Stats.bitErrors,
                 lsmV2Stats.bitErrors - lsmStats.bitErrors));
@@ -112,6 +119,12 @@ public class LSMv2ComparisonTest
                     if(message.getMessage() != null)
                     {
                         stats.bitErrors += Math.max(message.getMessage().getCorrectedBitCount(), 0);
+                    }
+                    P25P1DataUnitID duid = message.getDUID();
+                    if(duid == P25P1DataUnitID.LOGICAL_LINK_DATA_UNIT_1 ||
+                       duid == P25P1DataUnitID.LOGICAL_LINK_DATA_UNIT_2)
+                    {
+                        stats.lduCount++;
                     }
                 }
             }
@@ -195,5 +208,6 @@ public class LSMv2ComparisonTest
         int totalMessages = 0;
         int syncLosses = 0;
         int bitErrors = 0;
+        int lduCount = 0;
     }
 }

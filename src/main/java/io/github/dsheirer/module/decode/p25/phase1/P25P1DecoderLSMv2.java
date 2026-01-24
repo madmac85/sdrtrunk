@@ -213,6 +213,7 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
                 {
                     // Transition from silence to signal — new transmission starting
                     mDemodulator.coldStartReset();
+                    mMessageFramer.coldStartReset();
                     mInSilence = false;
                 }
                 mSilenceSampleCount = 0;

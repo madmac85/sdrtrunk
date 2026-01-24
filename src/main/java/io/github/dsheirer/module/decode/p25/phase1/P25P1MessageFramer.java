@@ -778,6 +778,25 @@ public class P25P1MessageFramer
     }
 
     /**
+     * Resets transmission-dependent state for cold-start scenarios.  Called when a new transmission is detected
+     * after a period of silence, to prevent stale NAC values from corrupting NID decoding of the new transmission.
+     */
+    public void coldStartReset()
+    {
+        mNACTracker.reset();
+        mMessageAssembler = null;
+        mMessageAssemblyRequired = false;
+        mPDUSequence = null;
+        mDibitCounter = 58;
+        mStatusSymbolDibitCounter = 36;
+        mSyncDetected = false;
+        mNIDPointer = 0;
+        mPreviousDataUnitID = P25P1DataUnitID.PLACE_HOLDER;
+        mDetectedDataUnitID = P25P1DataUnitID.PLACE_HOLDER;
+        mDetectedNAC = 0;
+    }
+
+    /**
      * Sets the listener to receive framed DMR messages.
      * @param listener for messages.
      */
