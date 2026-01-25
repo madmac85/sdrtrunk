@@ -282,7 +282,13 @@ public class DecoderFactory
                     modules.add(new P25P1DecoderLSM());
                     break;
                 case CQPSK_V2:
-                    modules.add(new P25P1DecoderLSMv2());
+                    P25P1DecoderLSMv2 lsmv2Decoder = new P25P1DecoderLSMv2();
+                    // Apply configured NAC if specified
+                    if(p1.hasConfiguredNAC())
+                    {
+                        lsmv2Decoder.setConfiguredNAC(p1.getConfiguredNAC());
+                    }
+                    modules.add(lsmv2Decoder);
                     break;
                 default:
                     throw new IllegalArgumentException("Unrecognized P25 Phase 1 Modulation [" + p1.getModulation() + "]");

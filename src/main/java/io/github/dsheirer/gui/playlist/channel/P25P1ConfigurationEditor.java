@@ -71,6 +71,8 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
     private RecordConfigurationEditor mRecordConfigurationEditor;
     private ToggleSwitch mIgnoreDataCallsButton;
     private Spinner<Integer> mTrafficChannelPoolSizeSpinner;
+    private Spinner<Integer> mNACSpinner;
+    private Label mNACLabel;
     private SegmentedButton mModulationSegmentedButton;
     private ToggleButton mC4FMToggleButton;
     private ToggleButton mLSMToggleButton;
@@ -146,9 +148,21 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
             GridPane.setConstraints(directionLabel, 5, 0);
             gridPane.getChildren().add(directionLabel);
 
+            // NAC configuration (row 1) - only visible for LSM v2
+            mNACLabel = new Label("NAC (0=auto)");
+            GridPane.setHalignment(mNACLabel, HPos.RIGHT);
+            GridPane.setConstraints(mNACLabel, 0, 1);
+            gridPane.getChildren().add(mNACLabel);
+
+            GridPane.setConstraints(getNACSpinner(), 1, 1);
+            gridPane.getChildren().add(getNACSpinner());
+
             Label modulationHelpLabel = new Label("C4FM: repeaters and non-simulcast trunked.  LSM: simulcast trunked.  LSM v2: conventional (PTT) CQPSK channels.");
-            GridPane.setConstraints(modulationHelpLabel, 0, 1, 6, 1);
+            GridPane.setConstraints(modulationHelpLabel, 0, 2, 6, 1);
             gridPane.getChildren().add(modulationHelpLabel);
+
+            // Update NAC visibility based on modulation selection
+            updateNACVisibility();
 
             mDecoderPane.setContent(gridPane);
         }
@@ -244,6 +258,8 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
                         //Only set modified if the toggle changed from one to the other
                         modifiedProperty().set(true);
                     }
+                    //Update NAC spinner visibility based on modulation
+                    updateNACVisibility();
                 }
             });
         }
@@ -313,6 +329,43 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
         return mTrafficChannelPoolSizeSpinner;
     }
 
+    private Spinner<Integer> getNACSpinner()
+    {
+        if(mNACSpinner == null)
+        {
+            mNACSpinner = new Spinner();
+            mNACSpinner.setDisable(true);
+            mNACSpinner.setTooltip(new Tooltip("Network Access Code (NAC) for this channel. Set to 0 for auto-detect, " +
+                    "or enter the known NAC (1-4095) for improved decode reliability with LSM v2."));
+            mNACSpinner.getStyleClass().add(Spinner.STYLE_CLASS_SPLIT_ARROWS_HORIZONTAL);
+            mNACSpinner.setEditable(true);
+            mNACSpinner.setPrefWidth(100);
+            SpinnerValueFactory<Integer> svf = new SpinnerValueFactory.IntegerSpinnerValueFactory(
+                    DecodeConfigP25Phase1.NAC_MINIMUM, DecodeConfigP25Phase1.NAC_MAXIMUM, 0);
+            mNACSpinner.setValueFactory(svf);
+            mNACSpinner.getValueFactory().valueProperty()
+                .addListener((observable, oldValue, newValue) -> modifiedProperty().set(true));
+        }
+
+        return mNACSpinner;
+    }
+
+    /**
+     * Updates the visibility of the NAC spinner based on the selected modulation.
+     * NAC configuration is only shown for LSM v2 modulation.
+     */
+    private void updateNACVisibility()
+    {
+        boolean showNAC = getLSMv2ToggleButton().isSelected();
+        if(mNACLabel != null)
+        {
+            mNACLabel.setVisible(showNAC);
+            mNACLabel.setManaged(showNAC);
+        }
+        getNACSpinner().setVisible(showNAC);
+        getNACSpinner().setManaged(showNAC);
+    }
+
     private RecordConfigurationEditor getRecordConfigurationEditor()
     {
         if(mRecordConfigurationEditor == null)
@@ -338,12 +391,14 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
     {
         getIgnoreDataCallsButton().setDisable(config == null);
         getTrafficChannelPoolSizeSpinner().setDisable(config == null);
+        getNACSpinner().setDisable(config == null);
 
         if(config instanceof DecodeConfigP25Phase1)
         {
             DecodeConfigP25Phase1 decodeConfig = (DecodeConfigP25Phase1)config;
             getIgnoreDataCallsButton().setSelected(decodeConfig.getIgnoreDataCalls());
             getTrafficChannelPoolSizeSpinner().getValueFactory().setValue(decodeConfig.getTrafficChannelPoolSize());
+            getNACSpinner().getValueFactory().setValue(decodeConfig.getConfiguredNAC());
             getC4FMToggleButton().setSelected(false);
             getLSMToggleButton().setSelected(false);
             getLSMv2ToggleButton().setSelected(false);
@@ -359,11 +414,13 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
                     getLSMToggleButton().setSelected(true);
                     break;
             }
+            updateNACVisibility();
         }
         else
         {
             getIgnoreDataCallsButton().setSelected(false);
             getTrafficChannelPoolSizeSpinner().getValueFactory().setValue(0);
+            getNACSpinner().getValueFactory().setValue(0);
         }
     }
 
@@ -383,6 +440,7 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
 
         config.setIgnoreDataCalls(getIgnoreDataCallsButton().isSelected());
         config.setTrafficChannelPoolSize(getTrafficChannelPoolSizeSpinner().getValue());
+        config.setConfiguredNAC(getNACSpinner().getValue());
 
         if(getC4FMToggleButton().isSelected())
         {
