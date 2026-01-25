@@ -35,10 +35,41 @@ public class NACTracker
     private static final Comparator<Tracker> TIME_ASCENDING_COMPARATOR = new TimeAscendingSorter();
     private final Map<Integer, Tracker> mTrackerMap = new HashMap<>();
     private static final int MAX_TRACKER_COUNT = 3;
-    private static final int MIN_OBSERVATION_THRESHOLD = 3;
+    private static final int MIN_OBSERVATION_THRESHOLD = 2; // Reduced from 3 for faster NAC acquisition
+
+    // User-configured NAC value (0 = not configured, use tracking)
+    private int mConfiguredNAC = 0;
+
+    /**
+     * Sets a user-configured NAC value. When set (non-zero), this NAC will always be returned
+     * by getTrackedNAC() regardless of observed NAC values, providing optimal NID error correction.
+     *
+     * @param nac the configured NAC value, or 0 to use automatic tracking
+     */
+    public void setConfiguredNAC(int nac)
+    {
+        mConfiguredNAC = nac;
+    }
+
+    /**
+     * Gets the user-configured NAC value, or 0 if not configured.
+     */
+    public int getConfiguredNAC()
+    {
+        return mConfiguredNAC;
+    }
+
+    /**
+     * Indicates if a user-configured NAC value is set.
+     */
+    public boolean hasConfiguredNAC()
+    {
+        return mConfiguredNAC > 0;
+    }
 
     /**
      * Removes all tracked NAC values.  Invoke this method after an extended loss of sync.
+     * Note: Does not clear the configured NAC value.
      */
     public void reset()
     {
@@ -77,10 +108,19 @@ public class NACTracker
     /**
      * Identifies the dominant NAC value by sorting the tracked NAC values in count order with the highest count NAC
      * value identified as the dominant NAC.  The dominant NAC must have at least 3 observations to be the dominant NAC.
-     * @return dominant tracked NAC value.
+     *
+     * If a user-configured NAC is set, returns that value instead of the tracked value.
+     *
+     * @return dominant tracked NAC value, or configured NAC if set.
      */
     public int getTrackedNAC()
     {
+        // If user has configured a known NAC, always use it
+        if(mConfiguredNAC > 0)
+        {
+            return mConfiguredNAC;
+        }
+
         if(mTrackerMap.isEmpty())
         {
             return 0;

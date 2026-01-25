@@ -39,18 +39,40 @@ import java.util.List;
  */
 public class LSMv2ComparisonTest
 {
+    // Configured NAC for testing (0 = auto-track)
+    private static int sConfiguredNAC = 0;
+
     public static void main(String[] args)
     {
         if(args.length < 1)
         {
-            System.out.println("Usage: LSMv2ComparisonTest <path-to-baseband.wav>");
+            System.out.println("Usage: LSMv2ComparisonTest <path-to-baseband.wav> [nac]");
             System.out.println("  Plays the baseband recording through both LSM and LSM v2 decoders");
             System.out.println("  and reports decode statistics for comparison.");
+            System.out.println("  Optional: specify known NAC value (0-4095) for improved error correction");
             return;
         }
 
         String filePath = args[0];
         File file = new File(filePath);
+
+        // Parse optional NAC argument
+        if(args.length >= 2)
+        {
+            try
+            {
+                sConfiguredNAC = Integer.parseInt(args[1]);
+                if(sConfiguredNAC < 0 || sConfiguredNAC > 4095)
+                {
+                    System.out.println("WARNING: NAC must be 0-4095, ignoring: " + sConfiguredNAC);
+                    sConfiguredNAC = 0;
+                }
+            }
+            catch(NumberFormatException e)
+            {
+                System.out.println("WARNING: Invalid NAC value, ignoring: " + args[1]);
+            }
+        }
 
         if(!file.exists())
         {
@@ -60,6 +82,10 @@ public class LSMv2ComparisonTest
 
         System.out.println("=== P25 LSM vs LSM v2 Comparison ===");
         System.out.println("File: " + file.getName());
+        if(sConfiguredNAC > 0)
+        {
+            System.out.println("Configured NAC: " + sConfiguredNAC);
+        }
         System.out.println();
 
         // Run LSM (original)
@@ -251,6 +277,13 @@ public class LSMv2ComparisonTest
             {
                 P25P1DecoderLSMv2 decoder = new P25P1DecoderLSMv2();
                 decoder.setMessageListener(messageListener);
+
+                // Set configured NAC if provided
+                if(sConfiguredNAC > 0)
+                {
+                    decoder.setConfiguredNAC(sConfiguredNAC);
+                }
+
                 decoder.start();
 
                 source.setListener(iNativeBuffer -> {

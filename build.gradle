@@ -394,7 +394,7 @@ tasks.register('runtimeZipOthers', org.beryx.runtime.RuntimeZipTask) {rt ->
 
 /**
  * Runs the LSM v2 comparison test against a baseband WAV file.
- * Usage: ./gradlew runComparison -PbasebandFile=path/to/baseband.wav
+ * Usage: ./gradlew runComparison -PbasebandFile=path/to/baseband.wav [-Pnac=117]
  */
 tasks.register('runComparison', JavaExec) {
     dependsOn testClasses
@@ -405,7 +405,12 @@ tasks.register('runComparison', JavaExec) {
     } else {
         jvmArgs = jvmArgsLinux
     }
+    def argsList = []
     if(project.hasProperty('basebandFile')) {
-        args = [project.property('basebandFile')]
+        argsList.add(project.property('basebandFile'))
     }
+    if(project.hasProperty('nac')) {
+        argsList.add(project.property('nac'))
+    }
+    args = argsList
 }

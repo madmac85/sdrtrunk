@@ -178,7 +178,7 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
     /**
      * Monitors energy on raw decimated I/Q samples to detect transmission boundaries.
      * Uses a dynamic threshold: silence is when energy drops below 10% of the observed peak.
-     * When sustained silence (500ms) is followed by signal return, triggers a cold-start reset.
+     * When sustained silence is followed by signal return, triggers a cold-start reset.
      */
     private void detectTransmissionBoundary(float[] i, float[] q)
     {
@@ -360,5 +360,24 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
     public P25P1DemodulatorLSMv2 getDemodulator()
     {
         return mDemodulator;
+    }
+
+    /**
+     * Sets a user-configured NAC value for this channel. When set, this NAC will be used for
+     * NID error correction assistance, improving decode reliability on known channels.
+     *
+     * @param nac the configured NAC value (0-4095), or 0 to use automatic tracking
+     */
+    public void setConfiguredNAC(int nac)
+    {
+        mMessageFramer.setConfiguredNAC(nac);
+    }
+
+    /**
+     * Gets the user-configured NAC value, or 0 if not configured.
+     */
+    public int getConfiguredNAC()
+    {
+        return mMessageFramer.getConfiguredNAC();
     }
 }

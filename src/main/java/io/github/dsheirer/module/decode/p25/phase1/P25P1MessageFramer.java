@@ -785,11 +785,35 @@ public class P25P1MessageFramer
 
     /**
      * Resets transmission-dependent state for cold-start scenarios.  Called when a new transmission is detected
-     * after a period of silence, to prevent stale NAC values from corrupting NID decoding of the new transmission.
+     * after a period of silence.
+     *
+     * Note: We intentionally do NOT reset the NAC tracker here because on conventional PTT channels, the same
+     * site transmits on the same frequency with the same NAC. Preserving the tracked NAC improves NID error
+     * correction by providing NAC assist for the first few NIDs after a transmission boundary.
      */
     public void coldStartReset()
     {
-        mNACTracker.reset();
+        // NAC tracker intentionally NOT reset - same site/channel typically has same NAC
+        // mNACTracker.reset();
+    }
+
+    /**
+     * Sets a user-configured NAC value for this channel. When set, this NAC will be used for
+     * NID error correction assistance, improving decode reliability on known channels.
+     *
+     * @param nac the configured NAC value, or 0 to use automatic tracking
+     */
+    public void setConfiguredNAC(int nac)
+    {
+        mNACTracker.setConfiguredNAC(nac);
+    }
+
+    /**
+     * Gets the user-configured NAC value, or 0 if not configured.
+     */
+    public int getConfiguredNAC()
+    {
+        return mNACTracker.getConfiguredNAC();
     }
 
     /**
