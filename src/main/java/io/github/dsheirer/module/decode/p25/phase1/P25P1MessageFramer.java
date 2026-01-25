@@ -77,6 +77,11 @@ public class P25P1MessageFramer
     private PDUSequence mPDUSequence;
     private int mDebugSymbolCount = 0;
 
+    // Diagnostic counters for v2 analysis
+    private int mSyncDetectionCount = 0;
+    private int mNIDDecodeSuccessCount = 0;
+    private int mNIDDecodeFailCount = 0;
+
     /**
      * Constructs an instance
      */
@@ -130,6 +135,7 @@ public class P25P1MessageFramer
 
         mSyncDetected = true;
         mNIDPointer = 0;
+        mSyncDetectionCount++;
     }
 
     /**
@@ -787,6 +793,41 @@ public class P25P1MessageFramer
     }
 
     /**
+     * Returns diagnostic statistics for analysis.
+     */
+    public String getDiagnostics()
+    {
+        double nidSuccessRate = mSyncDetectionCount > 0 ?
+                (double) mNIDDecodeSuccessCount / mSyncDetectionCount * 100.0 : 0;
+        return String.format("Sync detects: %d | NID success: %d (%.1f%%) | NID fail: %d",
+                mSyncDetectionCount, mNIDDecodeSuccessCount, nidSuccessRate, mNIDDecodeFailCount);
+    }
+
+    /**
+     * Returns the count of successful NID decodes.
+     */
+    public int getNIDDecodeSuccessCount()
+    {
+        return mNIDDecodeSuccessCount;
+    }
+
+    /**
+     * Returns the count of failed NID decodes.
+     */
+    public int getNIDDecodeFailCount()
+    {
+        return mNIDDecodeFailCount;
+    }
+
+    /**
+     * Returns the count of sync pattern detections.
+     */
+    public int getSyncDetectionCount()
+    {
+        return mSyncDetectionCount;
+    }
+
+    /**
      * Sets the listener to receive framed DMR messages.
      * @param listener for messages.
      */
@@ -847,8 +888,11 @@ public class P25P1MessageFramer
         //If error correction fails, return the original correction candidate
         if(nid.getCorrectedBitCount() < 0)
         {
+            mNIDDecodeFailCount++;
             return false;
         }
+
+        mNIDDecodeSuccessCount++;
 
         //The BCH decoder can over-correct the NID and produce an invalid NAC.  Compare it against the tracked NAC to
         //flag it as invalid NID when this happens.  The NAC tracker will give us a value of 0 until it has enough

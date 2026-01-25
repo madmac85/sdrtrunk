@@ -340,8 +340,25 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
      */
     public String getDiagnostics()
     {
-        return String.format("Boundary resets: %d | Peak energy: %.6f | Silence threshold: %d samples (%.0fms)",
-                mBoundaryResetCount, mPeakEnergy, mSilenceSamplesThreshold,
-                mSilenceSamplesThreshold * 1000.0 / (mSilenceSamplesThreshold / SILENCE_DURATION_SECONDS));
+        String demodDiag = mDemodulator.getDiagnostics();
+        String framerDiag = mMessageFramer.getDiagnostics();
+        return String.format("Boundary resets: %d | %s | %s",
+                mBoundaryResetCount, demodDiag, framerDiag);
+    }
+
+    /**
+     * Returns the message framer for diagnostic access.
+     */
+    public P25P1MessageFramer getMessageFramer()
+    {
+        return mMessageFramer;
+    }
+
+    /**
+     * Returns the demodulator for diagnostic access.
+     */
+    public P25P1DemodulatorLSMv2 getDemodulator()
+    {
+        return mDemodulator;
     }
 }

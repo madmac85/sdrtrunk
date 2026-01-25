@@ -80,6 +80,14 @@ public class P25P1DemodulatorLSMv2
     private int mSymbolsSinceLastValidNID = 0;
     private boolean mPLLResetApplied = false;
 
+    // Enhanced diagnostics for root-cause analysis
+    private int mValidNIDCount = 0;
+    private int mSyncDetectCount = 0;
+    private float mPLLAtLastReset = 0f;
+    private int mSymbolsAtLastReset = 0;
+    private float mMaxPLLDrift = 0f;
+    private int mTotalSymbols = 0;
+
     /**
      * Constructs an instance
      * @param messageFramer for receiving demodulated symbol stream and providing sync detection events.
@@ -108,6 +116,19 @@ public class P25P1DemodulatorLSMv2
      */
     public void coldStartReset()
     {
+        // Record diagnostic info before reset
+        mPLLAtLastReset = mPLL;
+        mSymbolsAtLastReset = mSymbolsSinceLastValidNID;
+
+        // Reset PLL and enable acquisition boost
+        mPLL = 0f;
+        mSymbolsSinceReset = 0;
+        mFirstSymbolAfterReset = true;
+
+        // Reset the inactivity tracking (we just got a boundary signal)
+        mSymbolsSinceLastValidNID = 0;
+        mPLLResetApplied = false;
+
         mColdStartResetCount++;
     }
 
@@ -116,8 +137,39 @@ public class P25P1DemodulatorLSMv2
      */
     public String getDiagnostics()
     {
-        return String.format("Cold-start resets: %d", mColdStartResetCount);
+        return String.format("PLL resets: %d | Valid NIDs: %d | Max PLL drift: %.3f rad (%.0f Hz) | " +
+                        "Last reset: PLL=%.3f at %d symbols",
+                mColdStartResetCount, mValidNIDCount,
+                mMaxPLLDrift, mMaxPLLDrift * SYMBOL_RATE / (2 * Math.PI),
+                mPLLAtLastReset, mSymbolsAtLastReset);
     }
+
+    /**
+     * Returns detailed diagnostic info for analysis tools.
+     */
+    public DiagnosticInfo getDiagnosticInfo()
+    {
+        return new DiagnosticInfo(
+                mColdStartResetCount,
+                mValidNIDCount,
+                mMaxPLLDrift,
+                mPLLAtLastReset,
+                mSymbolsAtLastReset,
+                mTotalSymbols
+        );
+    }
+
+    /**
+     * Container for detailed diagnostic information.
+     */
+    public record DiagnosticInfo(
+        int pllResetCount,
+        int validNIDCount,
+        float maxPLLDrift,
+        float pllAtLastReset,
+        int symbolsAtLastReset,
+        int totalSymbols
+    ) {}
 
     /**
      * Primary input method for receiving a stream of filtered, pulse-shaped samples to process into symbols.
@@ -270,12 +322,21 @@ public class P25P1DemodulatorLSMv2
                     hardSymbol = Dibit.D00_PLUS_1;
                 }
 
+                mTotalSymbols++;
+
+                // Track max PLL drift for diagnostics
+                if(Math.abs(pll) > Math.abs(mMaxPLLDrift))
+                {
+                    mMaxPLLDrift = pll;
+                }
+
                 //Message framer returns boolean if valid sync and NID were detected/decoded.
                 if(mMessageFramer.processWithSoftSyncDetect(softSymbol, hardSymbol))
                 {
                     mFeedbackDecoder.processPLLError(pll, SYMBOL_RATE);
                     mSymbolsSinceLastValidNID = 0;
                     mPLLResetApplied = false;
+                    mValidNIDCount++;
                 }
                 else
                 {
@@ -285,6 +346,10 @@ public class P25P1DemodulatorLSMv2
                     //to prevent PLL drift from blocking sync detection on next transmission
                     if(mSymbolsSinceLastValidNID >= PLL_RESET_INACTIVITY_THRESHOLD && !mPLLResetApplied)
                     {
+                        // Record diagnostic info before reset
+                        mPLLAtLastReset = pll;
+                        mSymbolsAtLastReset = mSymbolsSinceLastValidNID;
+
                         pll = 0f;
                         symbolsSinceReset = 0;  //Enable acquisition boost gain for next 15 symbols
                         mPLLResetApplied = true;
