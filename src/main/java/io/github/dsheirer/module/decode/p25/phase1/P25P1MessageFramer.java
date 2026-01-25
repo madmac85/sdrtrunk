@@ -784,16 +784,6 @@ public class P25P1MessageFramer
     public void coldStartReset()
     {
         mNACTracker.reset();
-        mMessageAssembler = null;
-        mMessageAssemblyRequired = false;
-        mPDUSequence = null;
-        mDibitCounter = 58;
-        mStatusSymbolDibitCounter = 36;
-        mSyncDetected = false;
-        mNIDPointer = 0;
-        mPreviousDataUnitID = P25P1DataUnitID.PLACE_HOLDER;
-        mDetectedDataUnitID = P25P1DataUnitID.PLACE_HOLDER;
-        mDetectedNAC = 0;
     }
 
     /**

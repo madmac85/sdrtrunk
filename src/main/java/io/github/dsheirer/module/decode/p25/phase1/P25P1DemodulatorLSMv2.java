@@ -74,6 +74,12 @@ public class P25P1DemodulatorLSMv2
     private boolean mFirstSymbolAfterReset = true;
     private int mColdStartResetCount = 0;
 
+    // Sync-activity-based PLL reset: after no valid NID for threshold symbols,
+    // zero PLL once to prepare for next transmission
+    private static final int PLL_RESET_INACTIVITY_THRESHOLD = 4800; // 1 second at 4800 symbols/sec
+    private int mSymbolsSinceLastValidNID = 0;
+    private boolean mPLLResetApplied = false;
+
     /**
      * Constructs an instance
      * @param messageFramer for receiving demodulated symbol stream and providing sync detection events.
@@ -102,15 +108,6 @@ public class P25P1DemodulatorLSMv2
      */
     public void coldStartReset()
     {
-        mPLL = 0f;
-        mPreviousSymbolI = 0f;
-        mPreviousSymbolQ = 0f;
-        mPreviousMiddleI = 0f;
-        mPreviousMiddleQ = 0f;
-        mPreviousCurrentI = 0f;
-        mPreviousCurrentQ = 0f;
-        mSymbolsSinceReset = 0;
-        mFirstSymbolAfterReset = true;
         mColdStartResetCount++;
     }
 
@@ -277,6 +274,22 @@ public class P25P1DemodulatorLSMv2
                 if(mMessageFramer.processWithSoftSyncDetect(softSymbol, hardSymbol))
                 {
                     mFeedbackDecoder.processPLLError(pll, SYMBOL_RATE);
+                    mSymbolsSinceLastValidNID = 0;
+                    mPLLResetApplied = false;
+                }
+                else
+                {
+                    mSymbolsSinceLastValidNID++;
+
+                    //One-shot PLL reset after prolonged inactivity (no valid NID)
+                    //to prevent PLL drift from blocking sync detection on next transmission
+                    if(mSymbolsSinceLastValidNID >= PLL_RESET_INACTIVITY_THRESHOLD && !mPLLResetApplied)
+                    {
+                        pll = 0f;
+                        symbolsSinceReset = 0;  //Enable acquisition boost gain for next 15 symbols
+                        mPLLResetApplied = true;
+                        mColdStartResetCount++;
+                    }
                 }
 
                 mDibitAssembler.receive(hardSymbol);

@@ -58,7 +58,7 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
     // Transmission boundary detection constants
     private static final float ENERGY_EMA_FACTOR = 0.001f;
     private static final float ENERGY_SILENCE_RATIO = 0.1f; // silence = below 10% of peak
-    private static final double SILENCE_DURATION_SECONDS = 0.5;
+    private static final double SILENCE_DURATION_SECONDS = 1.0;
 
     private final P25P1DemodulatorLSMv2 mDemodulator;
     private final P25P1MessageFramer mMessageFramer = new P25P1MessageFramer();
@@ -77,6 +77,7 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
     private int mSilenceSampleCount = 0;
     private int mSilenceSamplesThreshold = 12500;
     private boolean mInSilence = true;
+    private int mBoundaryResetCount = 0;
 
     @Override
     public DecoderType getDecoderType()
@@ -214,6 +215,7 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
                     // Transition from silence to signal — new transmission starting
                     mDemodulator.coldStartReset();
                     mMessageFramer.coldStartReset();
+                    mBoundaryResetCount++;
                     mInSilence = false;
                 }
                 mSilenceSampleCount = 0;
@@ -338,9 +340,8 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
      */
     public String getDiagnostics()
     {
-        return mDemodulator.getDiagnostics() +
-                String.format(" | Peak energy: %.6f | Silence threshold: %d samples (%.0fms)",
-                        mPeakEnergy, mSilenceSamplesThreshold,
-                        mSilenceSamplesThreshold * 1000.0 / (mSilenceSamplesThreshold / SILENCE_DURATION_SECONDS));
+        return String.format("Boundary resets: %d | Peak energy: %.6f | Silence threshold: %d samples (%.0fms)",
+                mBoundaryResetCount, mPeakEnergy, mSilenceSamplesThreshold,
+                mSilenceSamplesThreshold * 1000.0 / (mSilenceSamplesThreshold / SILENCE_DURATION_SECONDS));
     }
 }
