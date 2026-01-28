@@ -49,7 +49,7 @@ import org.slf4j.LoggerFactory;
  * and adaptive cold-start behavior for channels where the carrier turns on and off with each transmission.
  */
 public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferProvider, IComplexSamplesListener,
-        ISourceEventListener, ISourceEventProvider, Listener<ComplexSamples>
+        ISourceEventListener, ISourceEventProvider, Listener<ComplexSamples>, ISignalEnergyProvider
 {
     private static final Logger LOGGER = LoggerFactory.getLogger(P25P1DecoderLSMv2.class);
     private static final Map<Double,float[]> BASEBAND_FILTERS = new HashMap<>();
@@ -333,6 +333,30 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
     public Listener<ComplexSamples> getComplexSamplesListener()
     {
         return this;
+    }
+
+    /**
+     * Indicates if RF signal energy suggests an active transmission is present.
+     * This is based on the transmission boundary detection state - signal is
+     * considered present when not in silence.
+     *
+     * @return true if signal energy indicates an active transmission
+     */
+    @Override
+    public boolean isSignalPresent()
+    {
+        return !mInSilence && mPeakEnergy > 0;
+    }
+
+    /**
+     * Returns the current normalized signal energy level.
+     *
+     * @return signal energy level from 0.0 (silence) to 1.0 (peak observed energy)
+     */
+    @Override
+    public float getSignalEnergyLevel()
+    {
+        return mPeakEnergy > 0 ? mEnergyAverage / mPeakEnergy : 0f;
     }
 
     /**

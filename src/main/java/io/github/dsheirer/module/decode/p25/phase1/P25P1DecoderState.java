@@ -193,6 +193,14 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
     private final P25TrafficChannelManager mTrafficChannelManager;
     private ServiceOptions mCurrentServiceOptions;
 
+    // Signal energy provider for audio continuity holdover decisions
+    private ISignalEnergyProvider mSignalEnergyProvider;
+
+    // Audio continuity holdover state
+    private long mLastValidLDUTimestamp = 0;
+    private int mHoldoverMs = DecodeConfigP25Phase1.DEFAULT_AUDIO_HOLDOVER_MS;
+    private boolean mHoldoverActive = false;
+
     /**
      * Constructs an APCO-25 decoder state with an optional traffic channel manager.
      * @param channel with configuration details
@@ -232,6 +240,28 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
     public Modulation getModulation()
     {
         return mModulation;
+    }
+
+    /**
+     * Sets the signal energy provider used for audio continuity holdover decisions.
+     * When set, the decoder state can query signal energy to determine if an active
+     * transmission is still present during decode errors.
+     *
+     * @param provider the signal energy provider, or null to disable holdover
+     */
+    public void setSignalEnergyProvider(ISignalEnergyProvider provider)
+    {
+        mSignalEnergyProvider = provider;
+    }
+
+    /**
+     * Sets the audio holdover period in milliseconds.
+     *
+     * @param holdoverMs the holdover period (0 to disable)
+     */
+    public void setHoldoverMs(int holdoverMs)
+    {
+        mHoldoverMs = Math.max(0, Math.min(holdoverMs, DecodeConfigP25Phase1.MAX_AUDIO_HOLDOVER_MS));
     }
 
     /**
@@ -870,6 +900,8 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
      */
     private void processLDU(P25P1Message message)
     {
+        boolean validLDUProcessed = false;
+
         if(message instanceof LDU1Message ldu1)
         {
             LinkControlWord lcw = ldu1.getLinkControlWord();
@@ -879,6 +911,7 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
                 processLC(lcw, message.getTimestamp(), false);
                 mTrafficChannelManager.processP1TrafficLDU1(getCurrentFrequency(),
                         getIdentifierCollection().getIdentifiers(), message.getTimestamp(), ldu1.toString());
+                validLDUProcessed = true;
             }
         }
         else if(message instanceof LDU2Message ldu2)
@@ -902,6 +935,50 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
                             message.getTimestamp(), ldu2.toString());
                     broadcast(new DecoderStateEvent(this, Event.CONTINUATION, State.CALL));
                 }
+                validLDUProcessed = true;
+            }
+        }
+
+        // Update timestamp and reset holdover state when valid LDU is processed
+        if(validLDUProcessed)
+        {
+            mLastValidLDUTimestamp = message.getTimestamp();
+            mHoldoverActive = false;
+        }
+        else
+        {
+            // Check for holdover: if we received an LDU message but couldn't fully decode it,
+            // and signal energy indicates transmission is still active, extend the call state
+            checkAndApplyHoldover(message.getTimestamp());
+        }
+    }
+
+    /**
+     * Checks if holdover should extend the call state during decode errors.
+     * If signal energy indicates an active transmission and we're within the holdover period,
+     * broadcasts a continuation event to keep the call alive.
+     *
+     * @param currentTimestamp the current message timestamp
+     */
+    private void checkAndApplyHoldover(long currentTimestamp)
+    {
+        // Only apply holdover if enabled and we have a signal energy provider
+        if(mHoldoverMs <= 0 || mSignalEnergyProvider == null || mLastValidLDUTimestamp == 0)
+        {
+            return;
+        }
+
+        long timeSinceLastValidLDU = currentTimestamp - mLastValidLDUTimestamp;
+
+        // Only apply holdover if we're within the configured holdover period
+        if(timeSinceLastValidLDU <= mHoldoverMs)
+        {
+            // Check if signal energy indicates an active transmission
+            if(mSignalEnergyProvider.isSignalPresent())
+            {
+                // Broadcast continuation event to keep the call state alive
+                broadcast(new DecoderStateEvent(this, Event.CONTINUATION, State.CALL));
+                mHoldoverActive = true;
             }
         }
     }
@@ -911,6 +988,10 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
      */
     private void processTDU(P25P1Message message)
     {
+        // Reset holdover state - transmission explicitly ended
+        mLastValidLDUTimestamp = 0;
+        mHoldoverActive = false;
+
         mTrafficChannelManager.processP1TrafficCallEnd(getCurrentFrequency(), message.getTimestamp(), "TDU:" + message);
         broadcast(new DecoderStateEvent(this, Event.DECODE, State.ACTIVE));
     }
@@ -923,6 +1004,10 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
      */
     private void processTDULC(P25P1Message message)
     {
+        // Reset holdover state - transmission explicitly ended
+        mLastValidLDUTimestamp = 0;
+        mHoldoverActive = false;
+
         if(message instanceof TDULCMessage tdulc)
         {
             LinkControlWord lcw = tdulc.getLinkControlWord();

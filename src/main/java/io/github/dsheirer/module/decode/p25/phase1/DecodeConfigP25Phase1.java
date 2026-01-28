@@ -35,8 +35,19 @@ public class DecodeConfigP25Phase1 extends DecodeConfigP25
     public static final int NAC_MINIMUM = 0;
     public static final int NAC_MAXIMUM = 4095;
 
+    /**
+     * Default audio holdover period in milliseconds (approximately 1 LDU frame duration)
+     */
+    public static final int DEFAULT_AUDIO_HOLDOVER_MS = 180;
+
+    /**
+     * Maximum audio holdover period in milliseconds
+     */
+    public static final int MAX_AUDIO_HOLDOVER_MS = 250;
+
     private Modulation mModulation = Modulation.C4FM;
     private int mConfiguredNAC = 0; // 0 = auto-detect, 1-4095 = configured NAC
+    private int mAudioHoldoverMs = DEFAULT_AUDIO_HOLDOVER_MS;
 
     /**
      * Constructs an instance
@@ -99,6 +110,41 @@ public class DecodeConfigP25Phase1 extends DecodeConfigP25
     public boolean hasConfiguredNAC()
     {
         return mConfiguredNAC > 0;
+    }
+
+    /**
+     * Gets the audio holdover period in milliseconds. During decode errors, if RF signal energy
+     * indicates an active transmission is still present, the decoder will maintain the call state
+     * for up to this duration before ending the audio segment.
+     *
+     * @return holdover period in milliseconds (0 to MAX_AUDIO_HOLDOVER_MS)
+     */
+    @JacksonXmlProperty(isAttribute = true, localName = "audioHoldoverMs")
+    public int getAudioHoldoverMs()
+    {
+        return mAudioHoldoverMs;
+    }
+
+    /**
+     * Sets the audio holdover period in milliseconds. When set to 0, holdover is disabled.
+     * Values above MAX_AUDIO_HOLDOVER_MS will be clamped to the maximum.
+     *
+     * @param holdoverMs the holdover period in milliseconds (0 to MAX_AUDIO_HOLDOVER_MS)
+     */
+    public void setAudioHoldoverMs(int holdoverMs)
+    {
+        if(holdoverMs < 0)
+        {
+            mAudioHoldoverMs = 0;
+        }
+        else if(holdoverMs > MAX_AUDIO_HOLDOVER_MS)
+        {
+            mAudioHoldoverMs = MAX_AUDIO_HOLDOVER_MS;
+        }
+        else
+        {
+            mAudioHoldoverMs = holdoverMs;
+        }
     }
 
     /**

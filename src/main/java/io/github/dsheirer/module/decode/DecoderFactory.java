@@ -271,6 +271,8 @@ public class DecoderFactory
                                          AliasList aliasList, TrafficChannelManager trafficChannelManager,
                                          IChannelDescriptor channelDescriptor)
     {
+        P25P1DecoderLSMv2 lsmv2Decoder = null;
+
         if(channel.getDecodeConfiguration() instanceof DecodeConfigP25Phase1 p1)
         {
             switch(p1.getModulation())
@@ -282,7 +284,7 @@ public class DecoderFactory
                     modules.add(new P25P1DecoderLSM());
                     break;
                 case CQPSK_V2:
-                    P25P1DecoderLSMv2 lsmv2Decoder = new P25P1DecoderLSMv2();
+                    lsmv2Decoder = new P25P1DecoderLSMv2();
                     // Apply configured NAC if specified
                     if(p1.hasConfiguredNAC())
                     {
@@ -295,21 +297,32 @@ public class DecoderFactory
             }
         }
 
+        P25P1DecoderState decoderState = null;
+
         if(channel.getChannelType() == ChannelType.STANDARD)
         {
             P25TrafficChannelManager primaryTCM = new P25TrafficChannelManager(channel);
             modules.add(primaryTCM);
-            modules.add(new P25P1DecoderState(channel, primaryTCM));
+            decoderState = new P25P1DecoderState(channel, primaryTCM);
+            modules.add(decoderState);
         }
         else if(trafficChannelManager instanceof P25TrafficChannelManager parentTCM)
         {
-            P25P1DecoderState decoderState = new P25P1DecoderState(channel, parentTCM);
+            decoderState = new P25P1DecoderState(channel, parentTCM);
             decoderState.setCurrentChannel(channelDescriptor);
             modules.add(decoderState);
         }
         else
         {
             mLog.warn("Expected non-null traffic channel manager for channel " + channel.getName());
+        }
+
+        // Wire signal energy provider and holdover configuration for LSM v2 decoder
+        if(lsmv2Decoder != null && decoderState != null &&
+           channel.getDecodeConfiguration() instanceof DecodeConfigP25Phase1 p1Config)
+        {
+            decoderState.setSignalEnergyProvider(lsmv2Decoder);
+            decoderState.setHoldoverMs(p1Config.getAudioHoldoverMs());
         }
 
         modules.add(new P25P1AudioModule(userPreferences, aliasList));
