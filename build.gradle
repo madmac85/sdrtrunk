@@ -414,3 +414,61 @@ tasks.register('runComparison', JavaExec) {
     }
     args = argsList
 }
+
+/**
+ * Runs the audio comparison test with IMBE decoding and WAV output.
+ * Usage: ./gradlew runAudioComparison -PbasebandFile=path/to/baseband.wav -PjmbePath=/path/to/jmbe.jar [-Pnac=117] [-PoutputDir=output]
+ */
+tasks.register('runAudioComparison', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.dsheirer.module.decode.p25.phase1.AudioComparisonTest'
+    if(os.isWindows()) {
+        jvmArgs = jvmArgsWindows
+    } else {
+        jvmArgs = jvmArgsLinux
+    }
+    def argsList = []
+    if(project.hasProperty('basebandFile')) {
+        argsList.add(project.property('basebandFile'))
+    }
+    if(project.hasProperty('jmbePath')) {
+        argsList.add(project.property('jmbePath'))
+    }
+    if(project.hasProperty('nac')) {
+        argsList.add(project.property('nac'))
+    }
+    if(project.hasProperty('outputDir')) {
+        argsList.add(project.property('outputDir'))
+    }
+    args = argsList
+}
+
+/**
+ * Extracts a time segment from a baseband WAV file for isolated testing.
+ * Usage: ./gradlew extractSegment -PinputFile=input.wav -PoutputFile=segment.wav -PstartMs=45000 -PendMs=46000
+ */
+tasks.register('extractSegment', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.dsheirer.module.decode.p25.phase1.SegmentExtractor'
+    if(os.isWindows()) {
+        jvmArgs = jvmArgsWindows
+    } else {
+        jvmArgs = jvmArgsLinux
+    }
+    def argsList = []
+    if(project.hasProperty('inputFile')) {
+        argsList.add(project.property('inputFile'))
+    }
+    if(project.hasProperty('outputFile')) {
+        argsList.add(project.property('outputFile'))
+    }
+    if(project.hasProperty('startMs')) {
+        argsList.add(project.property('startMs'))
+    }
+    if(project.hasProperty('endMs')) {
+        argsList.add(project.property('endMs'))
+    }
+    args = argsList
+}

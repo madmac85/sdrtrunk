@@ -43,16 +43,16 @@ public class P25P1DemodulatorLSMv2
     private static final float OBJECTIVE_MAGNITUDE = 1.0f;
     private static final int SYMBOL_RATE = 4800;
 
-    // PLL gain
-    private static final float PLL_GAIN_ACQUISITION = 0.12f;
+    // PLL gain - acquisition boost helps lock onto carrier at transmission start
+    private static final float PLL_GAIN_ACQUISITION = 0.15f;  // Higher gain for faster initial lock
     private static final float PLL_GAIN_TRACKING = 0.1f;
-    private static final int PLL_ACQUISITION_SYMBOLS = 15;
+    private static final int PLL_ACQUISITION_SYMBOLS = 24;    // Extended to full sync pattern length
 
     // AGC gain (matches original LSM)
     private static final float AGC_GAIN = 0.05f;
 
-    // Gardner TED suppression
-    private static final int TED_SUPPRESSION_SYMBOLS = 2;
+    // Gardner TED suppression - suppress timing adjustments during initial acquisition
+    private static final int TED_SUPPRESSION_SYMBOLS = 4;
 
     private final DibitToByteBufferAssembler mDibitAssembler = new DibitToByteBufferAssembler(300);
     private final FeedbackDecoder mFeedbackDecoder;

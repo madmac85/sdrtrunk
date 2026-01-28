@@ -56,9 +56,9 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
     private static final int SYMBOL_RATE = 4800;
 
     // Transmission boundary detection constants
-    private static final float ENERGY_EMA_FACTOR = 0.001f;
-    private static final float ENERGY_SILENCE_RATIO = 0.1f; // silence = below 10% of peak
-    private static final double SILENCE_DURATION_SECONDS = 1.0;
+    private static final float ENERGY_EMA_FACTOR = 0.002f;  // Faster response to energy changes
+    private static final float ENERGY_SILENCE_RATIO = 0.15f; // silence = below 15% of peak
+    private static final double SILENCE_DURATION_SECONDS = 0.5; // 500ms silence threshold
 
     private final P25P1DemodulatorLSMv2 mDemodulator;
     private final P25P1MessageFramer mMessageFramer = new P25P1MessageFramer();
