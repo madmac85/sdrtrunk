@@ -15,7 +15,7 @@
 | T5 | Implement TransmissionScorer | P1 | T1, T2, T4 | Done |
 | T6 | Create TransmissionScoringTest | P1 | T3, T5 | Done |
 | T7 | Add Gradle task for scoring | P2 | T6 | Done |
-| T8 | Add slice extraction capability | P2 | T3 | Pending |
+| T8 | Add slice extraction capability | P2 | T3 | Done |
 | T9 | Run validation tests | P1 | T6 | Done |
 
 ---
@@ -246,12 +246,12 @@ tasks.register('runTransmissionScoring', JavaExec) {
 
 **Priority**: P2
 **Depends On**: T3
-**Status**: Pending
+**Status**: Done
 
 **Description**:
 Add ability to extract individual transmissions to separate WAV files.
 
-**File**: `src/test/java/io/github/dsheirer/module/decode/p25/phase1/TransmissionMapper.java` (extend)
+**File**: `src/test/java/io/github/dsheirer/module/decode/p25/phase1/TransmissionExtractor.java`
 
 **Implementation**:
 1. Calculate sample offset from timestamp: `offset = (timestamp_ms * sampleRate) / 1000`
@@ -260,10 +260,10 @@ Add ability to extract individual transmissions to separate WAV files.
 4. Write to new WAV file with descriptive name
 
 **Acceptance Criteria**:
-- [ ] Extracts correct portion of file
-- [ ] Adds configurable buffer before/after
-- [ ] Names output files descriptively (e.g., `tx_003_12345_15678.wav`)
-- [ ] Extracted slice decodes correctly
+- [x] Extracts correct portion of file
+- [x] Adds configurable buffer before/after (200ms default)
+- [x] Names output files descriptively (e.g., `basename_tx003_12345-15678.wav`)
+- [x] Extracted slice decodes correctly (verified with runComparison)
 
 ---
 

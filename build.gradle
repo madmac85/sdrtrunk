@@ -475,7 +475,7 @@ tasks.register('extractSegment', JavaExec) {
 
 /**
  * Runs the transmission scoring test to analyze decode quality per transmission.
- * Usage: ./gradlew runTransmissionScoring -PbasebandFile=path/to/baseband.wav [-Pnac=117]
+ * Usage: ./gradlew runTransmissionScoring -PbasebandFile=path/to/baseband.wav [-Pnac=117] [-PextractWorst=N] [-PextractRegressions=true] [-PoutputDir=dir]
  */
 tasks.register('runTransmissionScoring', JavaExec) {
     dependsOn testClasses
@@ -492,6 +492,17 @@ tasks.register('runTransmissionScoring', JavaExec) {
     }
     if(project.hasProperty('nac')) {
         argsList.add(project.property('nac'))
+    }
+    if(project.hasProperty('extractWorst')) {
+        argsList.add('--extract-worst')
+        argsList.add(project.property('extractWorst'))
+    }
+    if(project.hasProperty('extractRegressions')) {
+        argsList.add('--extract-regressions')
+    }
+    if(project.hasProperty('outputDir')) {
+        argsList.add('--output-dir')
+        argsList.add(project.property('outputDir'))
     }
     args = argsList
 }

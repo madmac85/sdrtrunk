@@ -38,23 +38,32 @@ import javax.sound.sampled.UnsupportedAudioFileException;
  * 2. Runs both LSM and LSM v2 decoders
  * 3. Scores each transmission's decode completeness
  * 4. Generates a comparative report
+ * 5. Optionally extracts worst/regression transmissions
  *
- * Usage: java TransmissionScoringTest <path-to-baseband.wav> [nac]
+ * Usage: java TransmissionScoringTest <path-to-baseband.wav> [nac] [--extract-worst N] [--extract-regressions] [--output-dir dir]
  */
 public class TransmissionScoringTest
 {
     private static int sConfiguredNAC = 0;
+    private static int sExtractWorst = 0;
+    private static boolean sExtractRegressions = false;
+    private static File sOutputDir = null;
 
     public static void main(String[] args)
     {
         if(args.length < 1)
         {
-            System.out.println("Usage: TransmissionScoringTest <path-to-baseband.wav> [nac]");
+            System.out.println("Usage: TransmissionScoringTest <path-to-baseband.wav> [nac] [options]");
             System.out.println("  Analyzes transmission decode quality for LSM vs LSM v2 decoders.");
             System.out.println();
             System.out.println("Arguments:");
-            System.out.println("  baseband.wav  - Input baseband recording");
-            System.out.println("  nac           - Optional: Known NAC value (0-4095)");
+            System.out.println("  baseband.wav         - Input baseband recording");
+            System.out.println("  nac                  - Optional: Known NAC value (0-4095)");
+            System.out.println();
+            System.out.println("Options:");
+            System.out.println("  --extract-worst N    - Extract N worst-performing transmissions");
+            System.out.println("  --extract-regressions - Extract all regression transmissions");
+            System.out.println("  --output-dir dir     - Output directory for extracts (default: ./extracts)");
             return;
         }
 
@@ -67,36 +76,69 @@ public class TransmissionScoringTest
             return;
         }
 
-        // Parse optional NAC
-        if(args.length >= 2)
+        // Parse arguments
+        for(int i = 1; i < args.length; i++)
         {
-            try
+            String arg = args[i];
+            if(arg.equals("--extract-worst") && i + 1 < args.length)
             {
-                sConfiguredNAC = Integer.parseInt(args[1]);
-                if(sConfiguredNAC < 0 || sConfiguredNAC > 4095)
+                try
                 {
-                    System.out.println("WARNING: NAC must be 0-4095, ignoring: " + sConfiguredNAC);
-                    sConfiguredNAC = 0;
+                    sExtractWorst = Integer.parseInt(args[++i]);
+                }
+                catch(NumberFormatException e)
+                {
+                    System.out.println("WARNING: Invalid --extract-worst value");
                 }
             }
-            catch(NumberFormatException e)
+            else if(arg.equals("--extract-regressions"))
             {
-                System.out.println("WARNING: Invalid NAC value, ignoring: " + args[1]);
+                sExtractRegressions = true;
             }
+            else if(arg.equals("--output-dir") && i + 1 < args.length)
+            {
+                sOutputDir = new File(args[++i]);
+            }
+            else if(!arg.startsWith("--"))
+            {
+                // Try parsing as NAC
+                try
+                {
+                    int nac = Integer.parseInt(arg);
+                    if(nac >= 0 && nac <= 4095)
+                    {
+                        sConfiguredNAC = nac;
+                    }
+                    else
+                    {
+                        System.out.println("WARNING: NAC must be 0-4095, ignoring: " + nac);
+                    }
+                }
+                catch(NumberFormatException e)
+                {
+                    System.out.println("WARNING: Unknown argument: " + arg);
+                }
+            }
+        }
+
+        // Default output directory
+        if(sOutputDir == null && (sExtractWorst > 0 || sExtractRegressions))
+        {
+            sOutputDir = new File("extracts");
         }
 
         try
         {
             runAnalysis(file);
         }
-        catch(IOException e)
+        catch(Exception e)
         {
             System.out.println("ERROR: " + e.getMessage());
             e.printStackTrace();
         }
     }
 
-    private static void runAnalysis(File file) throws IOException
+    private static void runAnalysis(File file) throws Exception
     {
         System.out.println("=== Transmission Scoring Analysis ===");
         System.out.println("File: " + file.getName());
@@ -132,6 +174,7 @@ public class TransmissionScoringTest
         // starting from 0. We don't need to normalize.
         long baseTimestamp = 0;
 
+
         // Step 3: Score each transmission
         System.out.println("--- Scoring Transmissions ---");
         TransmissionScorer scorer = new TransmissionScorer();
@@ -147,6 +190,36 @@ public class TransmissionScoringTest
         printSummary(scores, lsmStats, v2Stats);
         printRegressions(scores);
         printWorstTransmissions(scores);
+
+        // Step 5: Extract transmissions if requested
+        if(sExtractWorst > 0 || sExtractRegressions)
+        {
+            try
+            {
+                TransmissionExtractor extractor = new TransmissionExtractor();
+
+                if(sExtractWorst > 0)
+                {
+                    System.out.println();
+                    System.out.println("=== Extracting Worst Transmissions ===");
+                    extractor.extractWorstTransmissions(file, sOutputDir, scores, sExtractWorst, 200);
+                }
+
+                if(sExtractRegressions)
+                {
+                    System.out.println();
+                    System.out.println("=== Extracting Regressions ===");
+                    extractor.extractRegressions(file, sOutputDir, scores, 200);
+                }
+
+                System.out.println();
+                System.out.println("Extracts saved to: " + sOutputDir.getAbsolutePath());
+            }
+            catch(Exception e)
+            {
+                System.out.println("ERROR extracting transmissions: " + e.getMessage());
+            }
+        }
     }
 
     private static void printDetailedReport(List<TransmissionScore> scores)
