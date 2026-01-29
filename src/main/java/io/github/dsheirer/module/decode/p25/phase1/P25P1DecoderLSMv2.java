@@ -60,6 +60,10 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
     private static final float ENERGY_SILENCE_RATIO = 0.15f; // silence = below 15% of peak
     private static final double SILENCE_DURATION_SECONDS = 0.5; // 500ms silence threshold
 
+    // Strategy 3: Fade detection for TDU recovery
+    private static final int FADE_DETECTION_WINDOW_SAMPLES = 1250;  // 50ms at 25kHz decimated
+    private static final float FADE_THRESHOLD = 0.5f;              // 50% energy drop indicates fade
+
     private final P25P1DemodulatorLSMv2 mDemodulator;
     private final P25P1MessageFramer mMessageFramer = new P25P1MessageFramer();
     private final P25P1MessageProcessor mMessageProcessor = new P25P1MessageProcessor();
@@ -79,6 +83,11 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
     private boolean mInSilence = true;
     private int mBoundaryResetCount = 0;
 
+    // Strategy 3: Fade detection state for TDU recovery
+    private float mPreviousEnergyAverage = 0f;
+    private int mFadeWindowSampleCount = 0;
+    private int mFadeDetectionCount = 0;
+
     @Override
     public DecoderType getDecoderType()
     {
@@ -89,6 +98,8 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
     {
         mMessageProcessor.setMessageListener(getMessageListener());
         mDemodulator = new P25P1DemodulatorLSMv2(mMessageFramer, this);
+        // Strategy 1: Provide energy state to message framer for adaptive sync threshold
+        mMessageFramer.setEnergyProvider(this);
     }
 
     @Override
@@ -179,6 +190,7 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
      * Monitors energy on raw decimated I/Q samples to detect transmission boundaries.
      * Uses a dynamic threshold: silence is when energy drops below 10% of the observed peak.
      * When sustained silence is followed by signal return, triggers a cold-start reset.
+     * Also detects energy fade for TDU recovery (Strategy 3).
      */
     private void detectTransmissionBoundary(float[] i, float[] q)
     {
@@ -215,10 +227,35 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
                     // Transition from silence to signal — new transmission starting
                     mDemodulator.coldStartReset();
                     mMessageFramer.coldStartReset();
+                    // Strategy 2: Activate boundary recovery for hard sync detection
+                    mMessageFramer.setBoundaryRecoveryActive(true);
                     mBoundaryResetCount++;
                     mInSilence = false;
+                    // Reset fade detection for new transmission
+                    mPreviousEnergyAverage = mEnergyAverage;
+                    mFadeWindowSampleCount = 0;
                 }
                 mSilenceSampleCount = 0;
+            }
+
+            // Strategy 3: Fade detection for TDU recovery
+            // Only check when not in silence (active transmission)
+            if(!mInSilence && mPeakEnergy > 0)
+            {
+                mFadeWindowSampleCount++;
+                if(mFadeWindowSampleCount >= FADE_DETECTION_WINDOW_SAMPLES)
+                {
+                    // Check if energy dropped significantly over the window
+                    if(mPreviousEnergyAverage > 0 &&
+                       mEnergyAverage < mPreviousEnergyAverage * FADE_THRESHOLD)
+                    {
+                        // Energy fading rapidly - activate TDU recovery
+                        mMessageFramer.setFadeRecoveryActive(true);
+                        mFadeDetectionCount++;
+                    }
+                    mPreviousEnergyAverage = mEnergyAverage;
+                    mFadeWindowSampleCount = 0;
+                }
             }
         }
     }
@@ -366,8 +403,8 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
     {
         String demodDiag = mDemodulator.getDiagnostics();
         String framerDiag = mMessageFramer.getDiagnostics();
-        return String.format("Boundary resets: %d | %s | %s",
-                mBoundaryResetCount, demodDiag, framerDiag);
+        return String.format("Boundary resets: %d | Fade detections: %d | %s | %s",
+                mBoundaryResetCount, mFadeDetectionCount, demodDiag, framerDiag);
     }
 
     /**

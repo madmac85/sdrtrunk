@@ -50,6 +50,9 @@ public class P25P1MessageFramer
 {
     private static final int DIBIT_LENGTH_NID = 33; //32 dibits (64 bits) +1 status
     private static final float SYNC_DETECTION_THRESHOLD = 60;
+    private static final float SYNC_FALLBACK_THRESHOLD = 52;     // Strategy 1: Conservative fallback for weak signals
+    private static final float SYNC_FADE_THRESHOLD = 48;          // Strategy 3: Lower threshold during fade
+    private static final int RECOVERY_WINDOW_SYMBOLS = 240;       // Strategy 2: 50ms recovery window (first HDU sync)
     private final BCH_63_16_23_P25 mBCHDecoder = new BCH_63_16_23_P25();
     private static final IntField NAC_FIELD = IntField.length12(0);
     private static final IntField DUID_FIELD = IntField.length4(12);
@@ -82,6 +85,19 @@ public class P25P1MessageFramer
     private int mNIDDecodeSuccessCount = 0;
     private int mNIDDecodeFailCount = 0;
 
+    // Strategy 1: Adaptive sync threshold based on signal energy
+    private ISignalEnergyProvider mEnergyProvider;
+    private int mFallbackSyncCount = 0;
+
+    // Strategy 2: Boundary recovery window - use hard sync after transmission boundary
+    private boolean mBoundaryRecoveryActive = false;
+    private int mRecoverySymbolCount = 0;
+    private int mRecoverySyncCount = 0;
+
+    // Strategy 3: Fade recovery - lower threshold when signal is fading
+    private boolean mFadeRecoveryActive = false;
+    private int mFadeRecoverySyncCount = 0;
+
     /**
      * Constructs an instance
      */
@@ -91,17 +107,53 @@ public class P25P1MessageFramer
 
     /**
      * Process soft symbol and apply soft symbol sync pattern detection.
+     * Uses adaptive sync thresholds based on signal energy and recovery state.
+     *
      * @param softSymbol demodulated soft symbol
      * @param symbol as decision from the soft symbol
      * @return true if a sync pattern is detected and the following NID is decoded correctly.
      */
     public boolean processWithSoftSyncDetect(float softSymbol, Dibit symbol)
     {
+        // Track recovery window timeout (Strategy 2)
+        if(mBoundaryRecoveryActive)
+        {
+            mRecoverySymbolCount++;
+            if(mRecoverySymbolCount >= RECOVERY_WINDOW_SYMBOLS)
+            {
+                mBoundaryRecoveryActive = false;
+            }
+        }
+
         boolean validNIDDetected = process(symbol);
 
-        if(mSoftSyncDetector.process(softSymbol) > SYNC_DETECTION_THRESHOLD)
+        float syncScore = mSoftSyncDetector.process(softSymbol);
+
+        // Primary threshold - standard sync detection
+        if(syncScore > SYNC_DETECTION_THRESHOLD)
         {
             syncDetected();
+        }
+        // Strategy 3: Fade recovery - even lower threshold during signal fade
+        else if(mFadeRecoveryActive && syncScore > SYNC_FADE_THRESHOLD)
+        {
+            syncDetected();
+            mFadeRecoverySyncCount++;
+            mFadeRecoveryActive = false; // One-shot
+        }
+        // Strategy 1: Fallback threshold when signal energy confirms transmission present
+        else if(syncScore > SYNC_FALLBACK_THRESHOLD &&
+                mEnergyProvider != null &&
+                mEnergyProvider.isSignalPresent())
+        {
+            syncDetected();
+            mFallbackSyncCount++;
+        }
+        // Strategy 2: Hard sync during boundary recovery (more bit-error tolerant)
+        else if(mBoundaryRecoveryActive && mHardSyncDetector.process(symbol))
+        {
+            syncDetected();
+            mRecoverySyncCount++;
         }
 
         return validNIDDetected;
@@ -798,6 +850,36 @@ public class P25P1MessageFramer
     }
 
     /**
+     * Sets the signal energy provider for adaptive sync threshold detection (Strategy 1).
+     * @param provider that can report current signal energy state
+     */
+    public void setEnergyProvider(ISignalEnergyProvider provider)
+    {
+        mEnergyProvider = provider;
+    }
+
+    /**
+     * Activates boundary recovery mode which uses hard sync detection in parallel
+     * with soft sync for improved sync acquisition after transmission boundaries (Strategy 2).
+     * @param active true to activate recovery mode
+     */
+    public void setBoundaryRecoveryActive(boolean active)
+    {
+        mBoundaryRecoveryActive = active;
+        mRecoverySymbolCount = 0;
+    }
+
+    /**
+     * Activates fade recovery mode which uses a lower sync threshold when
+     * signal energy is fading at transmission end (Strategy 3).
+     * @param active true to activate fade recovery
+     */
+    public void setFadeRecoveryActive(boolean active)
+    {
+        mFadeRecoveryActive = active;
+    }
+
+    /**
      * Sets a user-configured NAC value for this channel. When set, this NAC will be used for
      * NID error correction assistance, improving decode reliability on known channels.
      *
@@ -823,8 +905,33 @@ public class P25P1MessageFramer
     {
         double nidSuccessRate = mSyncDetectionCount > 0 ?
                 (double) mNIDDecodeSuccessCount / mSyncDetectionCount * 100.0 : 0;
-        return String.format("Sync detects: %d | NID success: %d (%.1f%%) | NID fail: %d",
-                mSyncDetectionCount, mNIDDecodeSuccessCount, nidSuccessRate, mNIDDecodeFailCount);
+        return String.format("Sync: %d (fallback: %d, recovery: %d, fade: %d) | NID success: %d (%.1f%%) | NID fail: %d",
+                mSyncDetectionCount, mFallbackSyncCount, mRecoverySyncCount, mFadeRecoverySyncCount,
+                mNIDDecodeSuccessCount, nidSuccessRate, mNIDDecodeFailCount);
+    }
+
+    /**
+     * Returns the count of fallback sync detections (Strategy 1).
+     */
+    public int getFallbackSyncCount()
+    {
+        return mFallbackSyncCount;
+    }
+
+    /**
+     * Returns the count of recovery sync detections (Strategy 2).
+     */
+    public int getRecoverySyncCount()
+    {
+        return mRecoverySyncCount;
+    }
+
+    /**
+     * Returns the count of fade recovery sync detections (Strategy 3).
+     */
+    public int getFadeRecoverySyncCount()
+    {
+        return mFadeRecoverySyncCount;
     }
 
     /**
