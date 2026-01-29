@@ -472,3 +472,26 @@ tasks.register('extractSegment', JavaExec) {
     }
     args = argsList
 }
+
+/**
+ * Runs the transmission scoring test to analyze decode quality per transmission.
+ * Usage: ./gradlew runTransmissionScoring -PbasebandFile=path/to/baseband.wav [-Pnac=117]
+ */
+tasks.register('runTransmissionScoring', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.dsheirer.module.decode.p25.phase1.TransmissionScoringTest'
+    if(os.isWindows()) {
+        jvmArgs = jvmArgsWindows
+    } else {
+        jvmArgs = jvmArgsLinux
+    }
+    def argsList = []
+    if(project.hasProperty('basebandFile')) {
+        argsList.add(project.property('basebandFile'))
+    }
+    if(project.hasProperty('nac')) {
+        argsList.add(project.property('nac'))
+    }
+    args = argsList
+}

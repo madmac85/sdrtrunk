@@ -262,6 +262,15 @@ public class LSMv2ComparisonTest
                         stats.lduCount++;
                         stats.lduTimestamps.add(message.getTimestamp());
                     }
+                    else if(duid == P25P1DataUnitID.HEADER_DATA_UNIT)
+                    {
+                        stats.hduTimestamps.add(message.getTimestamp());
+                    }
+                    else if(duid == P25P1DataUnitID.TERMINATOR_DATA_UNIT ||
+                            duid == P25P1DataUnitID.TERMINATOR_DATA_UNIT_LINK_CONTROL)
+                    {
+                        stats.tduTimestamps.add(message.getTimestamp());
+                    }
                 }
             }
             else if(iMessage instanceof SyncLossMessage syncLoss)
@@ -346,7 +355,7 @@ public class LSMv2ComparisonTest
         }
     }
 
-    private static class DecoderStats
+    static class DecoderStats
     {
         int validMessages = 0;
         int totalMessages = 0;
@@ -358,6 +367,10 @@ public class LSMv2ComparisonTest
         List<Long> lduTimestamps = new ArrayList<>();
         List<Long> syncLossTimestamps = new ArrayList<>();
         List<Long> allMessageTimestamps = new ArrayList<>();
+
+        // HDU and TDU tracking for transmission scoring
+        List<Long> hduTimestamps = new ArrayList<>();
+        List<Long> tduTimestamps = new ArrayList<>();
 
         /**
          * Finds LDU gaps - periods where LDUs were expected but not decoded.
