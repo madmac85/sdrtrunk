@@ -2,7 +2,7 @@
 
 **Feature Branch**: `002-p25-lsm-v2`
 **Created**: 2026-01-24
-**Status**: Draft
+**Status**: Complete
 **Input**: Improve LSM demodulator for conventional (non-trunked, PTT) P25 CQPSK channels. Add as a selectable "LSM v2" option alongside existing LSM for A/B comparison with real RF signals.
 
 ## Background

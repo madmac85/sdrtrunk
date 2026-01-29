@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-pl-tone-filter`
 **Created**: 2026-01-24
-**Status**: Draft
+**Status**: Complete
 **Input**: User description: "I want the ability to filter analog FM channels with a PL tone. For example, 114.8 PL. If this tone is not detected then the squelch will not open and will not decode the audio. This should be specified for the channel in the playlist editor. In theory, you could have multiple channels on the same freq with different PL codes that would get different audio. If no PL is specified then all audio will be decoded (current behavior)"
 
 ## User Scenarios & Testing *(mandatory)*

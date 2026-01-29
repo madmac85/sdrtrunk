@@ -2,7 +2,7 @@
 
 **Feature Branch**: `004-transmission-scoring`
 **Created**: 2026-01-28
-**Status**: Draft
+**Status**: Complete
 **Input**: User description: "We really need to determine WHEN a transmission is in progress from the raw IQ samples. We then need to determine what percent of that transmission we are able to decode with the original LSM and LSM v2 decoder. This is a critical step to actually measure how much we are missing so we can continue to improve and identify the exact cases where we are having an issue. Then we can iterate on trying to decode/correct those small sections before doing a full regression. This will allow faster iteration."
 
 ## User Scenarios & Testing *(mandatory)*
