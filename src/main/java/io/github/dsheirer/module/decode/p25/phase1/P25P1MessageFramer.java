@@ -52,9 +52,10 @@ public class P25P1MessageFramer
     private static final float SYNC_DETECTION_THRESHOLD = 60;
     private static final float SYNC_FALLBACK_THRESHOLD = 52;     // Strategy 1: Conservative fallback for weak signals
     private static final float SYNC_FADE_THRESHOLD = 48;          // Strategy 3: Lower threshold during fade
-    private static final float SYNC_INITIAL_THRESHOLD = 44;       // Strategy 4: Initial acquisition for weak preambles
+    private static final float SYNC_INITIAL_THRESHOLD = 38;       // Strategy 4: Initial acquisition for weak preambles
+    private static final float SYNC_ULTRA_INITIAL_THRESHOLD = 34; // Strategy 4: Ultra-low for very first 50ms
     private static final int RECOVERY_WINDOW_SYMBOLS = 240;       // Strategy 2: 50ms recovery window (first HDU sync)
-    private static final int INITIAL_ACQUISITION_WINDOW_SYMBOLS = 480;  // Strategy 4: 100ms at 4800 symbols/sec
+    private static final int INITIAL_ACQUISITION_WINDOW_SYMBOLS = 960;  // Strategy 4: 200ms at 4800 symbols/sec
     private final BCH_63_16_23_P25 mBCHDecoder = new BCH_63_16_23_P25();
     private static final IntField NAC_FIELD = IntField.length12(0);
     private static final IntField DUID_FIELD = IntField.length4(12);
@@ -184,7 +185,8 @@ public class P25P1MessageFramer
 
     /**
      * Gets the current threshold for initial acquisition mode with adaptive ramping.
-     * Ramps from 44 (initial) to 52 (fallback) to 60 (standard) over 100ms.
+     * Ramps from 34 (ultra-initial) to 38 to 48 to 52 over 200ms in 4 phases.
+     * This aggressive ramping gives weak preamble transmissions more opportunity to sync.
      *
      * @return the current threshold based on acquisition window progress
      */
@@ -198,20 +200,25 @@ public class P25P1MessageFramer
         // Calculate progress through acquisition window (0 to 1)
         float progress = (float)mAcquisitionWindowSymbolCount / INITIAL_ACQUISITION_WINDOW_SYMBOLS;
 
-        if(progress < 0.33f)
+        if(progress < 0.25f)
         {
-            // First third: use initial threshold (44)
+            // First quarter (0-50ms): ultra-low threshold (34) for very weak starts
+            return SYNC_ULTRA_INITIAL_THRESHOLD;
+        }
+        else if(progress < 0.50f)
+        {
+            // Second quarter (50-100ms): initial threshold (38)
             return SYNC_INITIAL_THRESHOLD;
         }
-        else if(progress < 0.67f)
+        else if(progress < 0.75f)
         {
-            // Second third: use fallback threshold (52)
-            return SYNC_FALLBACK_THRESHOLD;
+            // Third quarter (100-150ms): fade threshold (48)
+            return SYNC_FADE_THRESHOLD;
         }
         else
         {
-            // Final third: use standard threshold (60)
-            return SYNC_DETECTION_THRESHOLD;
+            // Final quarter (150-200ms): fallback threshold (52)
+            return SYNC_FALLBACK_THRESHOLD;
         }
     }
 
