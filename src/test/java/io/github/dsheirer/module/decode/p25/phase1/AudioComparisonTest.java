@@ -176,41 +176,72 @@ public class AudioComparisonTest
         System.out.println(String.format("%-25s %10d %10d %+10d", "Sync Losses",
             lsmStats.syncLosses, v2Stats.syncLosses, v2Stats.syncLosses - lsmStats.syncLosses));
 
-        // Analyze missed transmissions
+        // Analyze missed transmissions using TransmissionMapper
         System.out.println();
         System.out.println("=== MISSED TRANSMISSIONS (v2) ===");
-        MissedTransmissionAnalyzer analyzer = new MissedTransmissionAnalyzer();
-
-        if(v2Stats.energyProfile != null && !v2Stats.lduTimestamps.isEmpty())
+        try
         {
-            long baseTimestamp = v2Stats.allMessageTimestamps.isEmpty() ? 0 : v2Stats.allMessageTimestamps.get(0);
-            List<MissedTransmissionAnalyzer.MissedTransmission> v2Missed =
-                analyzer.analyze(v2Stats.energyProfile, v2Stats.lduTimestamps, baseTimestamp);
+            TransmissionMapper mapper = new TransmissionMapper();
+            List<Transmission> transmissions = mapper.mapTransmissions(basebandFile);
 
-            if(v2Missed.isEmpty())
+            if(transmissions.isEmpty())
             {
-                System.out.println("No significant missed transmissions detected.");
+                System.out.println("No transmissions detected in recording.");
             }
             else
             {
-                System.out.println("High-energy periods with no decoded audio:");
-                int count = 0;
-                for(MissedTransmissionAnalyzer.MissedTransmission missed : v2Missed)
+                // Count missed (transmissions with no v2 LDUs)
+                TransmissionScorer scorer = new TransmissionScorer();
+                int missedCount = 0;
+                List<Transmission> missed = new ArrayList<>();
+
+                for(Transmission tx : transmissions)
                 {
-                    count++;
-                    System.out.printf("  %d. %dms - %dms (%dms) peak=%.2f%n",
-                        count, missed.startMs(), missed.endMs(), missed.durationMs(), missed.peakEnergy());
-                    if(count >= 10) break; // Limit output
+                    // Check if any v2 LDUs fall within this transmission
+                    int v2LdusInTx = 0;
+                    for(Long ts : v2Stats.lduTimestamps)
+                    {
+                        long normalizedTs = ts - (v2Stats.allMessageTimestamps.isEmpty() ? 0 : v2Stats.allMessageTimestamps.get(0));
+                        if(normalizedTs >= tx.startMs() - 100 && normalizedTs <= tx.endMs() + 100)
+                        {
+                            v2LdusInTx++;
+                        }
+                    }
+                    if(v2LdusInTx == 0)
+                    {
+                        missed.add(tx);
+                        missedCount++;
+                    }
                 }
-                if(v2Missed.size() > 10)
+
+                if(missed.isEmpty())
                 {
-                    System.out.println("  ... and " + (v2Missed.size() - 10) + " more");
+                    System.out.println("No significant missed transmissions detected.");
                 }
+                else
+                {
+                    System.out.println("High-energy periods with no decoded audio:");
+                    int count = 0;
+                    for(Transmission tx : missed)
+                    {
+                        count++;
+                        System.out.printf("  %d. %dms - %dms (%dms) peak=%.4f%n",
+                            count, tx.startMs(), tx.endMs(), tx.durationMs(), tx.peakEnergy());
+                        if(count >= 10) break; // Limit output
+                    }
+                    if(missed.size() > 10)
+                    {
+                        System.out.println("  ... and " + (missed.size() - 10) + " more");
+                    }
+                }
+
+                System.out.println();
+                System.out.println("Total transmissions: " + transmissions.size() + " | Missed by v2: " + missedCount);
             }
         }
-        else
+        catch(Exception e)
         {
-            System.out.println("Energy profile not available for analysis.");
+            System.out.println("Error analyzing transmissions: " + e.getMessage());
         }
 
         System.out.println();
@@ -282,11 +313,6 @@ public class AudioComparisonTest
 
         try(ComplexWaveSource source = new ComplexWaveSource(file, false))
         {
-            // Create energy profile for missed transmission analysis
-            MissedTransmissionAnalyzer.EnergyProfile energyProfile =
-                new MissedTransmissionAnalyzer.EnergyProfile(source.getSampleRate());
-            stats.energyProfile = energyProfile;
-
             if(useV2)
             {
                 P25P1DecoderLSMv2 decoder = new P25P1DecoderLSMv2();
@@ -305,8 +331,6 @@ public class AudioComparisonTest
                     {
                         ComplexSamples samples = it.next();
                         decoder.receive(samples);
-                        // Also track energy for missed transmission analysis
-                        energyProfile.addSamples(samples.i(), samples.q());
                     }
                 });
                 source.start();
@@ -328,7 +352,6 @@ public class AudioComparisonTest
                     {
                         ComplexSamples samples = it.next();
                         decoder.receive(samples);
-                        energyProfile.addSamples(samples.i(), samples.q());
                     }
                 });
                 source.start();
@@ -437,7 +460,5 @@ public class AudioComparisonTest
         List<Long> syncLossTimestamps = new ArrayList<>();
         List<Long> allMessageTimestamps = new ArrayList<>();
 
-        // Energy profile for missed transmission analysis
-        MissedTransmissionAnalyzer.EnergyProfile energyProfile;
     }
 }
