@@ -179,15 +179,18 @@ public class TransmissionScoringTest
         System.out.println("--- Scoring Transmissions ---");
         TransmissionScorer scorer = new TransmissionScorer();
         List<TransmissionScore> scores = new ArrayList<>();
+        List<TransmissionDecodeResult> decodeResults = new ArrayList<>();
 
         for(Transmission tx : transmissions)
         {
             scores.add(scorer.score(tx, lsmStats, v2Stats, baseTimestamp));
+            decodeResults.add(scorer.scoreForDetectionMetrics(tx, lsmStats, v2Stats, baseTimestamp));
         }
 
         // Step 4: Generate report
         printDetailedReport(scores);
         printSummary(scores, lsmStats, v2Stats);
+        printDetectionMetrics(decodeResults);
         printErrorMetrics(scores, lsmStats, v2Stats);
         printRegressions(scores);
         printWorstTransmissions(scores);
@@ -285,6 +288,12 @@ public class TransmissionScoringTest
         System.out.println(String.format("Avg v2 Score:        %.1f%%", avgV2Score));
         System.out.println(String.format("v2 Improvement:      %+.1f%%", avgV2Score - avgLsmScore));
         System.out.println();
+    }
+
+    private static void printDetectionMetrics(List<TransmissionDecodeResult> results)
+    {
+        DetectionMetrics metrics = new DetectionMetrics(results);
+        System.out.println(metrics.toReport());
     }
 
     private static void printErrorMetrics(List<TransmissionScore> scores,

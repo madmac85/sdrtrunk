@@ -176,4 +176,69 @@ public class TransmissionScorer
         }
         return total;
     }
+
+    /**
+     * Scores a transmission and returns a TransmissionDecodeResult for detection metrics analysis.
+     * This provides the same data as score() but in a format suitable for aggregate analysis.
+     *
+     * @param tx the transmission to score
+     * @param lsmStats decoder stats from LSM decoder
+     * @param v2Stats decoder stats from LSM v2 decoder
+     * @param baseTimestamp the base timestamp for normalizing decoder timestamps
+     * @return decode result with expected vs actual metrics
+     */
+    public TransmissionDecodeResult scoreForDetectionMetrics(
+        Transmission tx,
+        LSMv2ComparisonTest.DecoderStats lsmStats,
+        LSMv2ComparisonTest.DecoderStats v2Stats,
+        long baseTimestamp)
+    {
+        // Count LDUs within transmission boundaries
+        int lsmLduCount = countMessagesInRange(
+            tx.startMs(), tx.endMs(),
+            lsmStats.lduTimestamps, baseTimestamp);
+
+        int v2LduCount = countMessagesInRange(
+            tx.startMs(), tx.endMs(),
+            v2Stats.lduTimestamps, baseTimestamp);
+
+        // Check for HDU near transmission start
+        boolean lsmHasHDU = hasMessageNear(
+            tx.startMs(), BOUNDARY_TOLERANCE_MS,
+            lsmStats.hduTimestamps, baseTimestamp);
+
+        boolean v2HasHDU = hasMessageNear(
+            tx.startMs(), BOUNDARY_TOLERANCE_MS,
+            v2Stats.hduTimestamps, baseTimestamp);
+
+        // Check for TDU/TDULC near transmission end
+        boolean lsmHasTDU = hasMessageNear(
+            tx.endMs(), BOUNDARY_TOLERANCE_MS,
+            lsmStats.tduTimestamps, baseTimestamp);
+
+        boolean v2HasTDU = hasMessageNear(
+            tx.endMs(), BOUNDARY_TOLERANCE_MS,
+            v2Stats.tduTimestamps, baseTimestamp);
+
+        // Count bit errors within transmission
+        int lsmBitErrors = sumBitErrorsInRange(
+            tx.startMs(), tx.endMs(),
+            lsmStats.messageBitErrors, baseTimestamp);
+
+        int v2BitErrors = sumBitErrorsInRange(
+            tx.startMs(), tx.endMs(),
+            v2Stats.messageBitErrors, baseTimestamp);
+
+        return new TransmissionDecodeResult(
+            tx,
+            lsmLduCount,
+            v2LduCount,
+            lsmBitErrors,
+            v2BitErrors,
+            lsmHasHDU,
+            v2HasHDU,
+            lsmHasTDU,
+            v2HasTDU
+        );
+    }
 }
