@@ -104,20 +104,32 @@ public record SignalProfile(
      */
     public static SignalProfile fromEnergyValues(float avgEnergy, float peakEnergy, long durationMs)
     {
+        return fromEnergyValues(avgEnergy, peakEnergy, avgEnergy, avgEnergy * 0.1f, durationMs);
+    }
+
+    /**
+     * Creates a SignalProfile from pre-calculated energy values including preamble and variance.
+     * Used when transmission-level metrics are available from TransmissionMapper.
+     *
+     * @param avgEnergy Average energy from transmission
+     * @param peakEnergy Peak energy from transmission
+     * @param preambleEnergy Average energy during first 100ms
+     * @param energyVariance Standard deviation of energy
+     * @param durationMs Duration in milliseconds
+     * @return SignalProfile with actual metrics
+     */
+    public static SignalProfile fromEnergyValues(float avgEnergy, float peakEnergy, float preambleEnergy, float energyVariance, long durationMs)
+    {
         // Create synthetic envelope based on available data
         int envelopeLength = (int)(durationMs / 10); // One sample per 10ms
         float[] envelope = new float[Math.max(1, envelopeLength)];
         Arrays.fill(envelope, avgEnergy);
 
         float peakToAverage = avgEnergy > 0 ? peakEnergy / avgEnergy : 0;
-
-        // Without raw samples, we estimate conservative values
-        float variance = avgEnergy * 0.1f; // Assume 10% variance
-        float preambleEnergy = avgEnergy; // Assume uniform energy
         float energySlope = 0; // Unknown without raw data
         float snrEstimate = 0; // Cannot estimate without noise floor
 
-        return new SignalProfile(envelope, avgEnergy, variance, preambleEnergy, energySlope, peakToAverage, snrEstimate);
+        return new SignalProfile(envelope, avgEnergy, energyVariance, preambleEnergy, energySlope, peakToAverage, snrEstimate);
     }
 
     private static float calculateWindowEnergy(float[] samples, int start, int end)

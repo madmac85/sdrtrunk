@@ -28,6 +28,8 @@ public record Transmission(
     long endMs,          // End timestamp in milliseconds from file start
     float peakEnergy,    // Peak signal energy observed during transmission
     float avgEnergy,     // Average signal energy during transmission
+    float preambleEnergy,// Average energy during first 100ms (preamble window)
+    float energyVariance,// Standard deviation of energy over transmission
     boolean isComplete   // True if transmission has clear start and end, false if cut off at recording boundary
 ) {
     /**
@@ -56,5 +58,23 @@ public record Transmission(
         return String.format("TX#%d [%d-%d ms, %d ms, %d expected LDUs%s]",
             index, startMs, endMs, durationMs(), expectedLDUs(),
             isComplete ? "" : ", incomplete");
+    }
+
+    /**
+     * Returns the ratio of preamble energy to average energy.
+     * Values below 0.7 indicate weak preamble condition.
+     */
+    public float preambleRatio()
+    {
+        return avgEnergy > 0 ? preambleEnergy / avgEnergy : 0;
+    }
+
+    /**
+     * Returns true if the preamble energy is significantly weaker than the average.
+     * Threshold: preamble < 70% of average energy.
+     */
+    public boolean hasWeakPreamble()
+    {
+        return avgEnergy > 0 && preambleEnergy < avgEnergy * 0.7f;
     }
 }

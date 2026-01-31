@@ -52,7 +52,9 @@ public class P25P1MessageFramer
     private static final float SYNC_DETECTION_THRESHOLD = 60;
     private static final float SYNC_FALLBACK_THRESHOLD = 52;     // Strategy 1: Conservative fallback for weak signals
     private static final float SYNC_FADE_THRESHOLD = 48;          // Strategy 3: Lower threshold during fade
+    private static final float SYNC_INITIAL_THRESHOLD = 44;       // Strategy 4: Initial acquisition for weak preambles
     private static final int RECOVERY_WINDOW_SYMBOLS = 240;       // Strategy 2: 50ms recovery window (first HDU sync)
+    private static final int INITIAL_ACQUISITION_WINDOW_SYMBOLS = 480;  // Strategy 4: 100ms at 4800 symbols/sec
     private final BCH_63_16_23_P25 mBCHDecoder = new BCH_63_16_23_P25();
     private static final IntField NAC_FIELD = IntField.length12(0);
     private static final IntField DUID_FIELD = IntField.length4(12);
@@ -98,6 +100,11 @@ public class P25P1MessageFramer
     private boolean mFadeRecoveryActive = false;
     private int mFadeRecoverySyncCount = 0;
 
+    // Strategy 4: Initial acquisition - lower threshold for weak preambles
+    private boolean mInitialAcquisitionActive = false;
+    private int mAcquisitionWindowSymbolCount = 0;
+    private int mInitialAcquisitionSyncCount = 0;
+
     /**
      * Constructs an instance
      */
@@ -125,6 +132,16 @@ public class P25P1MessageFramer
             }
         }
 
+        // Track initial acquisition window timeout (Strategy 4)
+        if(mInitialAcquisitionActive)
+        {
+            mAcquisitionWindowSymbolCount++;
+            if(mAcquisitionWindowSymbolCount >= INITIAL_ACQUISITION_WINDOW_SYMBOLS)
+            {
+                mInitialAcquisitionActive = false;
+            }
+        }
+
         boolean validNIDDetected = process(symbol);
 
         float syncScore = mSoftSyncDetector.process(softSymbol);
@@ -133,6 +150,12 @@ public class P25P1MessageFramer
         if(syncScore > SYNC_DETECTION_THRESHOLD)
         {
             syncDetected();
+        }
+        // Strategy 4: Initial acquisition with adaptive threshold for weak preambles
+        else if(mInitialAcquisitionActive && syncScore > getCurrentInitialThreshold())
+        {
+            syncDetected();
+            mInitialAcquisitionSyncCount++;
         }
         // Strategy 3: Fade recovery - even lower threshold during signal fade
         else if(mFadeRecoveryActive && syncScore > SYNC_FADE_THRESHOLD)
@@ -157,6 +180,39 @@ public class P25P1MessageFramer
         }
 
         return validNIDDetected;
+    }
+
+    /**
+     * Gets the current threshold for initial acquisition mode with adaptive ramping.
+     * Ramps from 44 (initial) to 52 (fallback) to 60 (standard) over 100ms.
+     *
+     * @return the current threshold based on acquisition window progress
+     */
+    private float getCurrentInitialThreshold()
+    {
+        if(!mInitialAcquisitionActive)
+        {
+            return SYNC_FALLBACK_THRESHOLD;
+        }
+
+        // Calculate progress through acquisition window (0 to 1)
+        float progress = (float)mAcquisitionWindowSymbolCount / INITIAL_ACQUISITION_WINDOW_SYMBOLS;
+
+        if(progress < 0.33f)
+        {
+            // First third: use initial threshold (44)
+            return SYNC_INITIAL_THRESHOLD;
+        }
+        else if(progress < 0.67f)
+        {
+            // Second third: use fallback threshold (52)
+            return SYNC_FALLBACK_THRESHOLD;
+        }
+        else
+        {
+            // Final third: use standard threshold (60)
+            return SYNC_DETECTION_THRESHOLD;
+        }
     }
 
     /**
@@ -880,6 +936,26 @@ public class P25P1MessageFramer
     }
 
     /**
+     * Activates initial acquisition mode which uses a lower, ramping sync threshold
+     * during the first 100ms of a new transmission to recover weak preambles (Strategy 4).
+     * @param active true to activate initial acquisition mode
+     */
+    public void setInitialAcquisitionActive(boolean active)
+    {
+        mInitialAcquisitionActive = active;
+        mAcquisitionWindowSymbolCount = 0;
+    }
+
+    /**
+     * Checks if initial acquisition mode is currently active.
+     * @return true if in initial acquisition window
+     */
+    public boolean isInitialAcquisitionActive()
+    {
+        return mInitialAcquisitionActive;
+    }
+
+    /**
      * Sets a user-configured NAC value for this channel. When set, this NAC will be used for
      * NID error correction assistance, improving decode reliability on known channels.
      *
@@ -905,8 +981,8 @@ public class P25P1MessageFramer
     {
         double nidSuccessRate = mSyncDetectionCount > 0 ?
                 (double) mNIDDecodeSuccessCount / mSyncDetectionCount * 100.0 : 0;
-        return String.format("Sync: %d (fallback: %d, recovery: %d, fade: %d) | NID success: %d (%.1f%%) | NID fail: %d",
-                mSyncDetectionCount, mFallbackSyncCount, mRecoverySyncCount, mFadeRecoverySyncCount,
+        return String.format("Sync: %d (initial: %d, fallback: %d, recovery: %d, fade: %d) | NID success: %d (%.1f%%) | NID fail: %d",
+                mSyncDetectionCount, mInitialAcquisitionSyncCount, mFallbackSyncCount, mRecoverySyncCount, mFadeRecoverySyncCount,
                 mNIDDecodeSuccessCount, nidSuccessRate, mNIDDecodeFailCount);
     }
 
@@ -932,6 +1008,14 @@ public class P25P1MessageFramer
     public int getFadeRecoverySyncCount()
     {
         return mFadeRecoverySyncCount;
+    }
+
+    /**
+     * Returns the count of initial acquisition sync detections (Strategy 4).
+     */
+    public int getInitialAcquisitionSyncCount()
+    {
+        return mInitialAcquisitionSyncCount;
     }
 
     /**

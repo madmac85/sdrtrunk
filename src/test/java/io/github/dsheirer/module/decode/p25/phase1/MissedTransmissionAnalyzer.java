@@ -605,6 +605,146 @@ public class MissedTransmissionAnalyzer
         {
             System.out.println("  Negative correlation - unexpected, may indicate issue with metrics");
         }
+
+        // Additional correlation analyses: Preamble and Variance
+        printPreambleCorrelation();
+        printVarianceCorrelation();
+    }
+
+    /**
+     * Prints preamble energy ratio correlation with decode success.
+     * Weak preamble (ratio < 0.7) is a key indicator of sync failure.
+     */
+    private void printPreambleCorrelation()
+    {
+        System.out.println();
+        System.out.println("--- PREAMBLE ENERGY CORRELATION ---");
+
+        // Separate transmissions by preamble strength
+        List<TransmissionDecodeResult> weakPreamble = new ArrayList<>();
+        List<TransmissionDecodeResult> normalPreamble = new ArrayList<>();
+
+        for(TransmissionDecodeResult result : allResults)
+        {
+            if(result.transmission().hasWeakPreamble())
+            {
+                weakPreamble.add(result);
+            }
+            else
+            {
+                normalPreamble.add(result);
+            }
+        }
+
+        // Calculate decode rates for each group
+        double weakPreambleDecodeRate = calculateV2DecodeRate(weakPreamble);
+        double normalPreambleDecodeRate = calculateV2DecodeRate(normalPreamble);
+
+        int weakMissed = countMissed(weakPreamble);
+        int normalMissed = countMissed(normalPreamble);
+
+        System.out.println(String.format("  Weak preamble (<70%%):   %3d TX, v2 decode: %5.1f%%, missed: %d",
+            weakPreamble.size(), weakPreambleDecodeRate, weakMissed));
+        System.out.println(String.format("  Normal preamble (>=70%%): %3d TX, v2 decode: %5.1f%%, missed: %d",
+            normalPreamble.size(), normalPreambleDecodeRate, normalMissed));
+
+        if(!weakPreamble.isEmpty() && !normalPreamble.isEmpty())
+        {
+            double rateGap = normalPreambleDecodeRate - weakPreambleDecodeRate;
+            System.out.println(String.format("  Decode rate gap: %.1f%% (weak preamble penalty)", rateGap));
+
+            if(rateGap > 10.0)
+            {
+                System.out.println("  -> Significant weak preamble impact detected");
+            }
+        }
+    }
+
+    /**
+     * Prints energy variance correlation with decode success.
+     * High variance (>30% of average) indicates unstable signal.
+     */
+    private void printVarianceCorrelation()
+    {
+        System.out.println();
+        System.out.println("--- ENERGY VARIANCE CORRELATION ---");
+
+        // Separate transmissions by variance level
+        List<TransmissionDecodeResult> highVariance = new ArrayList<>();
+        List<TransmissionDecodeResult> normalVariance = new ArrayList<>();
+
+        for(TransmissionDecodeResult result : allResults)
+        {
+            Transmission tx = result.transmission();
+            // High variance threshold: variance > 30% of average energy
+            boolean isHighVariance = tx.avgEnergy() > 0 && tx.energyVariance() > tx.avgEnergy() * 0.3f;
+            if(isHighVariance)
+            {
+                highVariance.add(result);
+            }
+            else
+            {
+                normalVariance.add(result);
+            }
+        }
+
+        // Calculate decode rates for each group
+        double highVarianceDecodeRate = calculateV2DecodeRate(highVariance);
+        double normalVarianceDecodeRate = calculateV2DecodeRate(normalVariance);
+
+        int highMissed = countMissed(highVariance);
+        int normalMissed = countMissed(normalVariance);
+
+        System.out.println(String.format("  High variance (>30%%):   %3d TX, v2 decode: %5.1f%%, missed: %d",
+            highVariance.size(), highVarianceDecodeRate, highMissed));
+        System.out.println(String.format("  Normal variance (<=30%%): %3d TX, v2 decode: %5.1f%%, missed: %d",
+            normalVariance.size(), normalVarianceDecodeRate, normalMissed));
+
+        if(!highVariance.isEmpty() && !normalVariance.isEmpty())
+        {
+            double rateGap = normalVarianceDecodeRate - highVarianceDecodeRate;
+            System.out.println(String.format("  Decode rate gap: %.1f%% (high variance penalty)", rateGap));
+
+            if(rateGap > 10.0)
+            {
+                System.out.println("  -> Significant variance impact detected");
+            }
+        }
+    }
+
+    /**
+     * Calculate v2 decode rate for a set of transmissions.
+     */
+    private double calculateV2DecodeRate(List<TransmissionDecodeResult> results)
+    {
+        if(results.isEmpty()) return 0;
+
+        int totalExpected = 0;
+        int totalDecoded = 0;
+
+        for(TransmissionDecodeResult result : results)
+        {
+            totalExpected += result.transmission().expectedLDUs();
+            totalDecoded += result.v2LduCount();
+        }
+
+        return totalExpected > 0 ? (double)totalDecoded / totalExpected * 100.0 : 0;
+    }
+
+    /**
+     * Count missed transmissions (zero LDUs decoded by v2).
+     */
+    private int countMissed(List<TransmissionDecodeResult> results)
+    {
+        int count = 0;
+        for(TransmissionDecodeResult result : results)
+        {
+            if(result.v2LduCount() == 0)
+            {
+                count++;
+            }
+        }
+        return count;
     }
 
     /**

@@ -372,10 +372,12 @@ public class SyncFailureInvestigator
                             tx.avgEnergy(), tx.durationMs())
                     );
 
-                    // Create SignalProfile from transmission energy values
+                    // Create SignalProfile from transmission energy values (with actual preamble and variance)
                     SignalProfile profile = SignalProfile.fromEnergyValues(
                         tx.avgEnergy(),
                         tx.peakEnergy(),
+                        tx.preambleEnergy(),
+                        tx.energyVariance(),
                         tx.durationMs()
                     );
 
@@ -485,7 +487,7 @@ public class SyncFailureInvestigator
             return;
         }
 
-        // Calculate statistics for successful transmissions
+        // Calculate statistics for successful transmissions (using actual transmission metrics)
         double successAvgEnergy = successResults.stream()
             .mapToDouble(r -> r.transmission().avgEnergy())
             .average().orElse(0);
@@ -495,8 +497,17 @@ public class SyncFailureInvestigator
         double successPeakToAvg = successResults.stream()
             .mapToDouble(r -> r.transmission().peakEnergy() / Math.max(0.0001, r.transmission().avgEnergy()))
             .average().orElse(0);
+        double successEnergyVariance = successResults.stream()
+            .mapToDouble(r -> r.transmission().energyVariance())
+            .average().orElse(0);
+        double successPreambleEnergy = successResults.stream()
+            .mapToDouble(r -> r.transmission().preambleEnergy())
+            .average().orElse(0);
+        double successPreambleRatio = successResults.stream()
+            .mapToDouble(r -> r.transmission().preambleRatio())
+            .average().orElse(0);
 
-        // Calculate statistics for sync failures
+        // Calculate statistics for sync failures (using actual transmission metrics via profile)
         double failAvgEnergy = syncFailures.stream()
             .mapToDouble(sf -> sf.profile().avgEnergy())
             .average().orElse(0);
@@ -506,16 +517,15 @@ public class SyncFailureInvestigator
         double failPeakToAvg = syncFailures.stream()
             .mapToDouble(sf -> sf.profile().peakToAverage())
             .average().orElse(0);
-
-        // Calculate variance for sync failures
         double failEnergyVariance = syncFailures.stream()
             .mapToDouble(sf -> sf.profile().energyVariance())
             .average().orElse(0);
-
-        // For success, estimate variance (we don't have detailed profiles)
-        double successEnergyVariance = calculateEnergyStdDev(
-            successResults.stream().map(r -> r.transmission().avgEnergy()).toList()
-        );
+        double failPreambleEnergy = syncFailures.stream()
+            .mapToDouble(sf -> sf.profile().preambleEnergy())
+            .average().orElse(0);
+        double failPreambleRatio = syncFailures.stream()
+            .mapToDouble(sf -> sf.missed().result().transmission().preambleRatio())
+            .average().orElse(0);
 
         System.out.println();
         System.out.println(String.format("%-25s %12s %12s %12s",
@@ -551,6 +561,18 @@ public class SyncFailureInvestigator
             successEnergyVariance,
             failEnergyVariance,
             failEnergyVariance - successEnergyVariance));
+
+        System.out.println(String.format("%-25s %12.5f %12.5f %+12.5f",
+            "Preamble Energy",
+            successPreambleEnergy,
+            failPreambleEnergy,
+            failPreambleEnergy - successPreambleEnergy));
+
+        System.out.println(String.format("%-25s %12.2f%% %11.2f%% %+11.2f%%",
+            "Preamble Ratio",
+            successPreambleRatio * 100,
+            failPreambleRatio * 100,
+            (failPreambleRatio - successPreambleRatio) * 100));
     }
 
     /**
@@ -572,34 +594,27 @@ public class SyncFailureInvestigator
         List<Double> peakEnergy = new ArrayList<>();
         List<Double> peakToAvg = new ArrayList<>();
         List<Double> duration = new ArrayList<>();
+        List<Double> energyVariance = new ArrayList<>();
+        List<Double> preambleEnergy = new ArrayList<>();
+        List<Double> preambleRatio = new ArrayList<>();
 
         for(TransmissionDecodeResult result : allResults)
         {
+            Transmission tx = result.transmission();
             // Decode success: 1.0 for any decode, 0.0 for missed
             double success = result.status() != TransmissionDecodeResult.DecodeStatus.MISSED ? 1.0 : 0.0;
             decodeSuccess.add(success);
-            avgEnergy.add((double) result.transmission().avgEnergy());
-            peakEnergy.add((double) result.transmission().peakEnergy());
-            double pa = result.transmission().avgEnergy() > 0 ?
-                result.transmission().peakEnergy() / result.transmission().avgEnergy() : 0;
+            avgEnergy.add((double) tx.avgEnergy());
+            peakEnergy.add((double) tx.peakEnergy());
+            double pa = tx.avgEnergy() > 0 ? tx.peakEnergy() / tx.avgEnergy() : 0;
             peakToAvg.add(pa);
-            duration.add((double) result.transmission().durationMs());
-        }
+            duration.add((double) tx.durationMs());
 
-        // Calculate energy variance for each transmission (estimated from peak/avg difference)
-        List<Double> energyVariance = new ArrayList<>();
-        for(TransmissionDecodeResult result : allResults)
-        {
-            // Estimate variance from peak-to-average ratio
-            double pa = result.transmission().avgEnergy() > 0 ?
-                result.transmission().peakEnergy() / result.transmission().avgEnergy() : 0;
-            // Higher peak-to-average suggests higher variance
-            double estimatedVariance = (pa - 1.0) * result.transmission().avgEnergy();
-            energyVariance.add(Math.max(0, estimatedVariance));
+            // Use actual variance and preamble from transmission (calculated by TransmissionMapper)
+            energyVariance.add((double) tx.energyVariance());
+            preambleEnergy.add((double) tx.preambleEnergy());
+            preambleRatio.add((double) tx.preambleRatio());
         }
-
-        // Calculate preamble energy estimate (we use average as proxy without raw samples)
-        List<Double> preambleEnergy = new ArrayList<>(avgEnergy); // Proxy: use avg
 
         // Calculate correlations
         double corrAvgEnergy = calculatePearsonCorrelation(avgEnergy, decodeSuccess);
@@ -607,6 +622,8 @@ public class SyncFailureInvestigator
         double corrPeakToAvg = calculatePearsonCorrelation(peakToAvg, decodeSuccess);
         double corrDuration = calculatePearsonCorrelation(duration, decodeSuccess);
         double corrVariance = calculatePearsonCorrelation(energyVariance, decodeSuccess);
+        double corrPreamble = calculatePearsonCorrelation(preambleEnergy, decodeSuccess);
+        double corrPreambleRatio = calculatePearsonCorrelation(preambleRatio, decodeSuccess);
 
         System.out.println();
         System.out.println(String.format("%-25s %12s %s",
@@ -617,7 +634,9 @@ public class SyncFailureInvestigator
         printCorrelationRow("Peak Energy", corrPeakEnergy);
         printCorrelationRow("Peak-to-Average Ratio", corrPeakToAvg);
         printCorrelationRow("Duration", corrDuration);
-        printCorrelationRow("Energy Variance (est.)", corrVariance);
+        printCorrelationRow("Energy Variance", corrVariance);
+        printCorrelationRow("Preamble Energy", corrPreamble);
+        printCorrelationRow("Preamble Ratio", corrPreambleRatio);
 
         System.out.println();
         System.out.println("Interpretation:");

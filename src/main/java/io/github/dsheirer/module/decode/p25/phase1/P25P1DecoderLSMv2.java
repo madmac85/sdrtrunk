@@ -62,6 +62,7 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
 
     // Strategy 3: Fade detection for TDU recovery
     private static final int FADE_DETECTION_WINDOW_SAMPLES = 1250;  // 50ms at 25kHz decimated
+    private static final int ACQUISITION_FADE_WINDOW_SAMPLES = 625; // 25ms during initial acquisition (faster response)
     private static final float FADE_THRESHOLD = 0.5f;              // 50% energy drop indicates fade
 
     private final P25P1DemodulatorLSMv2 mDemodulator;
@@ -229,6 +230,8 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
                     mMessageFramer.coldStartReset();
                     // Strategy 2: Activate boundary recovery for hard sync detection
                     mMessageFramer.setBoundaryRecoveryActive(true);
+                    // Strategy 4: Activate initial acquisition for weak preamble recovery
+                    mMessageFramer.setInitialAcquisitionActive(true);
                     mBoundaryResetCount++;
                     mInSilence = false;
                     // Reset fade detection for new transmission
@@ -238,18 +241,21 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
                 mSilenceSampleCount = 0;
             }
 
-            // Strategy 3: Fade detection for TDU recovery
+            // Strategy 3: Fade detection for TDU and acquisition recovery
             // Only check when not in silence (active transmission)
             if(!mInSilence && mPeakEnergy > 0)
             {
                 mFadeWindowSampleCount++;
-                if(mFadeWindowSampleCount >= FADE_DETECTION_WINDOW_SAMPLES)
+                // Use shorter window during initial acquisition for faster fade response
+                int effectiveWindow = mMessageFramer.isInitialAcquisitionActive() ?
+                        ACQUISITION_FADE_WINDOW_SAMPLES : FADE_DETECTION_WINDOW_SAMPLES;
+                if(mFadeWindowSampleCount >= effectiveWindow)
                 {
                     // Check if energy dropped significantly over the window
                     if(mPreviousEnergyAverage > 0 &&
                        mEnergyAverage < mPreviousEnergyAverage * FADE_THRESHOLD)
                     {
-                        // Energy fading rapidly - activate TDU recovery
+                        // Energy fading rapidly - activate recovery
                         mMessageFramer.setFadeRecoveryActive(true);
                         mFadeDetectionCount++;
                     }

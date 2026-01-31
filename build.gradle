@@ -506,3 +506,63 @@ tasks.register('runTransmissionScoring', JavaExec) {
     }
     args = argsList
 }
+
+/**
+ * Runs the sync failure investigation to analyze why transmissions fail to sync.
+ * Usage: ./gradlew runSyncFailureInvestigation -Pdir=path/to/samples [-Pnac=117]
+ */
+tasks.register('runSyncFailureInvestigation', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.dsheirer.module.decode.p25.phase1.SyncFailureInvestigator'
+    if(os.isWindows()) {
+        jvmArgs = jvmArgsWindows
+    } else {
+        jvmArgs = jvmArgsLinux
+    }
+    def argsList = []
+    if(project.hasProperty('dir')) {
+        argsList.add('--dir')
+        argsList.add(project.property('dir'))
+    }
+    if(project.hasProperty('basebandFile')) {
+        argsList.add(project.property('basebandFile'))
+    }
+    if(project.hasProperty('nac')) {
+        argsList.add('--nac')
+        argsList.add(project.property('nac'))
+    }
+    args = argsList
+}
+
+/**
+ * Runs the missed transmission analysis to identify optimization opportunities.
+ * Usage: ./gradlew runMissedTransmissionAnalysis -Pdir=path/to/samples [-Pnac=117] [-Pextract=output/dir]
+ */
+tasks.register('runMissedTransmissionAnalysis', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.dsheirer.module.decode.p25.phase1.MissedTransmissionAnalyzer'
+    if(os.isWindows()) {
+        jvmArgs = jvmArgsWindows
+    } else {
+        jvmArgs = jvmArgsLinux
+    }
+    def argsList = []
+    if(project.hasProperty('dir')) {
+        argsList.add('--dir')
+        argsList.add(project.property('dir'))
+    }
+    if(project.hasProperty('basebandFile')) {
+        argsList.add(project.property('basebandFile'))
+    }
+    if(project.hasProperty('nac')) {
+        argsList.add('--nac')
+        argsList.add(project.property('nac'))
+    }
+    if(project.hasProperty('extract')) {
+        argsList.add('--extract')
+        argsList.add(project.property('extract'))
+    }
+    args = argsList
+}

@@ -42,6 +42,7 @@ public class TransmissionMapper
     private static final long MIN_TRANSMISSION_MS = 180;   // Minimum 1 LDU duration
     private static final long MIN_GAP_MS = 500;            // Gap required to split transmissions
     private static final long BUFFER_MS = 100;             // Buffer for slice extraction
+    private static final long PREAMBLE_MS = 100;           // First 100ms is the preamble window
 
     // Energy tracking state
     private float mEnergyAverage = 0f;
@@ -54,6 +55,10 @@ public class TransmissionMapper
     private float mPeriodPeakEnergy = 0f;
     private double mPeriodSumEnergy = 0;
     private int mPeriodSampleCount = 0;
+    // Preamble and variance tracking
+    private double mPreambleSumEnergy = 0;
+    private int mPreambleSampleCount = 0;
+    private double mVarianceSumSquares = 0;  // For Welford's algorithm
 
     // Detected transmissions
     private final List<SignalPeriod> mSignalPeriods = new ArrayList<>();
@@ -154,10 +159,25 @@ public class TransmissionMapper
                     mPeriodPeakEnergy = 0f;
                     mPeriodSumEnergy = 0;
                     mPeriodSampleCount = 0;
+                    mPreambleSumEnergy = 0;
+                    mPreambleSampleCount = 0;
+                    mVarianceSumSquares = 0;
                 }
                 mPeriodPeakEnergy = Math.max(mPeriodPeakEnergy, mEnergyAverage);
                 mPeriodSumEnergy += mEnergyAverage;
                 mPeriodSampleCount++;
+
+                // Track preamble energy (first 100ms)
+                long elapsedMs = samplesToMs(mSampleCount - mSignalStartSample);
+                if(elapsedMs < PREAMBLE_MS)
+                {
+                    mPreambleSumEnergy += mEnergyAverage;
+                    mPreambleSampleCount++;
+                }
+
+                // Welford's online variance algorithm
+                double delta = mEnergyAverage - (mPeriodSumEnergy / mPeriodSampleCount);
+                mVarianceSumSquares += delta * delta;
             }
             else
             {
@@ -182,8 +202,10 @@ public class TransmissionMapper
         long startMs = samplesToMs(mSignalStartSample);
         long endMs = samplesToMs(endSample);
         float avgEnergy = mPeriodSampleCount > 0 ? (float)(mPeriodSumEnergy / mPeriodSampleCount) : 0;
+        float preambleEnergy = mPreambleSampleCount > 0 ? (float)(mPreambleSumEnergy / mPreambleSampleCount) : avgEnergy;
+        float variance = mPeriodSampleCount > 1 ? (float)Math.sqrt(mVarianceSumSquares / mPeriodSampleCount) : 0;
 
-        mSignalPeriods.add(new SignalPeriod(startMs, endMs, mPeriodPeakEnergy, avgEnergy, isComplete));
+        mSignalPeriods.add(new SignalPeriod(startMs, endMs, mPeriodPeakEnergy, avgEnergy, preambleEnergy, variance, isComplete));
         mSignalStartSample = null;
     }
 
@@ -223,11 +245,14 @@ public class TransmissionMapper
             if(gap < MIN_GAP_MS)
             {
                 // Merge: extend current period
+                // Keep preamble from first period (it's the actual transmission start)
                 current = new SignalPeriod(
                     current.startMs,
                     next.endMs,
                     Math.max(current.peakEnergy, next.peakEnergy),
                     (current.avgEnergy + next.avgEnergy) / 2, // simple average
+                    current.preambleEnergy, // keep original preamble
+                    (current.energyVariance + next.energyVariance) / 2, // average variance
                     next.isComplete
                 );
             }
@@ -253,6 +278,8 @@ public class TransmissionMapper
                     period.endMs,
                     period.peakEnergy,
                     period.avgEnergy,
+                    period.preambleEnergy,
+                    period.energyVariance,
                     period.isComplete
                 ));
             }
@@ -280,5 +307,13 @@ public class TransmissionMapper
     /**
      * Internal record for tracking signal periods during detection.
      */
-    private record SignalPeriod(long startMs, long endMs, float peakEnergy, float avgEnergy, boolean isComplete) {}
+    private record SignalPeriod(
+        long startMs,
+        long endMs,
+        float peakEnergy,
+        float avgEnergy,
+        float preambleEnergy,
+        float energyVariance,
+        boolean isComplete
+    ) {}
 }
