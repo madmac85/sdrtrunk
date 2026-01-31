@@ -28,7 +28,12 @@ public record TransmissionScore(
     boolean lsmHasHDU,         // True if LSM decoded HDU at start
     boolean v2HasHDU,          // True if v2 decoded HDU at start
     boolean lsmHasTDU,         // True if LSM decoded TDU/TDULC at end
-    boolean v2HasTDU           // True if v2 decoded TDU/TDULC at end
+    boolean v2HasTDU,          // True if v2 decoded TDU/TDULC at end
+    // Error metrics
+    int lsmBitErrors,          // Bit errors corrected by LSM
+    int v2BitErrors,           // Bit errors corrected by v2
+    int lsmInvalidMessages,    // Invalid messages in LSM
+    int v2InvalidMessages      // Invalid messages in v2
 ) {
     /**
      * LSM decoder score as percentage of expected LDUs decoded.
@@ -91,5 +96,41 @@ public record TransmissionScore(
         if(!v2HasTDU) sb.append("noTDU ");
         if(!transmission.isComplete()) sb.append("TRUNC ");
         return sb.toString().trim();
+    }
+
+    /**
+     * Estimated bit error rate for LSM decoder.
+     * Based on expected LDUs * 1568 bits per LDU.
+     */
+    public double lsmBER()
+    {
+        int expectedBits = transmission.expectedLDUs() * 1568;
+        return expectedBits > 0 ? (double)lsmBitErrors / expectedBits * 100.0 : 0;
+    }
+
+    /**
+     * Estimated bit error rate for LSM v2 decoder.
+     * Based on expected LDUs * 1568 bits per LDU.
+     */
+    public double v2BER()
+    {
+        int expectedBits = transmission.expectedLDUs() * 1568;
+        return expectedBits > 0 ? (double)v2BitErrors / expectedBits * 100.0 : 0;
+    }
+
+    /**
+     * Bit error improvement (positive means v2 has fewer errors).
+     */
+    public int bitErrorDelta()
+    {
+        return lsmBitErrors - v2BitErrors;
+    }
+
+    /**
+     * Invalid message improvement (positive means v2 has fewer invalid messages).
+     */
+    public int invalidMessageDelta()
+    {
+        return lsmInvalidMessages - v2InvalidMessages;
     }
 }

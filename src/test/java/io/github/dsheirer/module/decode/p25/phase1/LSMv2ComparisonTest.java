@@ -251,10 +251,16 @@ public class LSMv2ComparisonTest
                 if(message.isValid())
                 {
                     stats.validMessages++;
-                    if(message.getMessage() != null)
+                    int correctedBits = message.getMessage() != null ?
+                        Math.max(message.getMessage().getCorrectedBitCount(), 0) : 0;
+                    if(correctedBits > 0)
                     {
-                        stats.bitErrors += Math.max(message.getMessage().getCorrectedBitCount(), 0);
+                        stats.messagesWithBitErrors++;
+                        stats.maxBitErrorsPerMessage = Math.max(stats.maxBitErrorsPerMessage, correctedBits);
+                        stats.messageBitErrors.add(new long[]{message.getTimestamp(), correctedBits});
                     }
+                    stats.bitErrors += correctedBits;
+
                     P25P1DataUnitID duid = message.getDUID();
                     if(duid == P25P1DataUnitID.LOGICAL_LINK_DATA_UNIT_1 ||
                        duid == P25P1DataUnitID.LOGICAL_LINK_DATA_UNIT_2)
@@ -271,6 +277,11 @@ public class LSMv2ComparisonTest
                     {
                         stats.tduTimestamps.add(message.getTimestamp());
                     }
+                }
+                else
+                {
+                    stats.invalidMessages++;
+                    stats.invalidMessageTimestamps.add(message.getTimestamp());
                 }
             }
             else if(iMessage instanceof SyncLossMessage syncLoss)
@@ -307,6 +318,16 @@ public class LSMv2ComparisonTest
 
                 processFile(source);
                 sV2Diagnostics = decoder.getDiagnostics();
+
+                // Capture framer diagnostics for error rate analysis
+                P25P1MessageFramer framer = decoder.getMessageFramer();
+                stats.syncDetectionCount = framer.getSyncDetectionCount();
+                stats.nidDecodeSuccessCount = framer.getNIDDecodeSuccessCount();
+                stats.nidDecodeFailCount = framer.getNIDDecodeFailCount();
+                stats.fallbackSyncCount = framer.getFallbackSyncCount();
+                stats.recoverySyncCount = framer.getRecoverySyncCount();
+                stats.fadeRecoverySyncCount = framer.getFadeRecoverySyncCount();
+
                 decoder.stop();
             }
             else
@@ -363,6 +384,19 @@ public class LSMv2ComparisonTest
         int bitErrors = 0;
         int lduCount = 0;
 
+        // Error aggregation (Phase 1 additions)
+        int invalidMessages = 0;          // Messages failing isValid()
+        int messagesWithBitErrors = 0;    // Messages with correctedBitCount > 0
+        int maxBitErrorsPerMessage = 0;   // Peak correction in any message
+
+        // Framer diagnostics (v2 only, populated post-decode)
+        int syncDetectionCount = 0;
+        int nidDecodeSuccessCount = 0;
+        int nidDecodeFailCount = 0;
+        int fallbackSyncCount = 0;
+        int recoverySyncCount = 0;
+        int fadeRecoverySyncCount = 0;
+
         // Timestamp tracking for correlation analysis
         List<Long> lduTimestamps = new ArrayList<>();
         List<Long> syncLossTimestamps = new ArrayList<>();
@@ -371,6 +405,12 @@ public class LSMv2ComparisonTest
         // HDU and TDU tracking for transmission scoring
         List<Long> hduTimestamps = new ArrayList<>();
         List<Long> tduTimestamps = new ArrayList<>();
+
+        // Per-message error tracking for transmission-level aggregation
+        // Each entry is [timestamp, bitErrors]
+        List<long[]> messageBitErrors = new ArrayList<>();
+        // Timestamps of invalid messages
+        List<Long> invalidMessageTimestamps = new ArrayList<>();
 
         /**
          * Finds LDU gaps - periods where LDUs were expected but not decoded.
@@ -392,6 +432,45 @@ public class LSMv2ComparisonTest
                 }
             }
             return gaps;
+        }
+
+        /**
+         * NID decode success rate as percentage.
+         */
+        double nidSuccessRate()
+        {
+            return syncDetectionCount > 0 ?
+                (double)nidDecodeSuccessCount / syncDetectionCount * 100.0 : 0;
+        }
+
+        /**
+         * Message validity rate as percentage.
+         */
+        double validMessageRate()
+        {
+            return totalMessages > 0 ?
+                (double)validMessages / totalMessages * 100.0 : 0;
+        }
+
+        /**
+         * Estimated bit error rate based on LDU count.
+         * LDU contains ~1568 bits of data.
+         */
+        double estimatedBER()
+        {
+            // LDU = ~1568 bits, estimate total bits from LDU count
+            int estimatedBits = lduCount * 1568;
+            return estimatedBits > 0 ?
+                (double)bitErrors / estimatedBits * 100.0 : 0;
+        }
+
+        /**
+         * Percentage of valid messages that required no bit error correction.
+         */
+        double errorFreeMessageRate()
+        {
+            return validMessages > 0 ?
+                (double)(validMessages - messagesWithBitErrors) / validMessages * 100.0 : 0;
         }
     }
 }

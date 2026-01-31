@@ -188,6 +188,7 @@ public class TransmissionScoringTest
         // Step 4: Generate report
         printDetailedReport(scores);
         printSummary(scores, lsmStats, v2Stats);
+        printErrorMetrics(scores, lsmStats, v2Stats);
         printRegressions(scores);
         printWorstTransmissions(scores);
 
@@ -226,16 +227,16 @@ public class TransmissionScoringTest
     {
         System.out.println("=== Per-Transmission Scores ===");
         System.out.println(String.format(
-            "%-4s %8s %8s %8s %5s %6s %6s %6s %6s %3s %3s  %-20s",
-            "ID", "Start", "End", "Duration", "Exp", "LSM", "v2", "LSM%", "v2%", "HDU", "TDU", "Flags"
+            "%-4s %8s %8s %8s %5s %6s %6s %6s %6s %3s %3s %6s %6s  %-20s",
+            "ID", "Start", "End", "Duration", "Exp", "LSM", "v2", "LSM%", "v2%", "HDU", "TDU", "Lerr", "v2err", "Flags"
         ));
-        System.out.println("-".repeat(100));
+        System.out.println("-".repeat(120));
 
         for(TransmissionScore score : scores)
         {
             Transmission tx = score.transmission();
             System.out.println(String.format(
-                "%-4d %8d %8d %8d %5d %6d %6d %5.1f%% %5.1f%% %3s %3s  %-20s",
+                "%-4d %8d %8d %8d %5d %6d %6d %5.1f%% %5.1f%% %3s %3s %6d %6d  %-20s",
                 tx.index(),
                 tx.startMs(),
                 tx.endMs(),
@@ -247,6 +248,8 @@ public class TransmissionScoringTest
                 score.v2Score(),
                 score.v2HasHDU() ? "Y" : "N",
                 score.v2HasTDU() ? "Y" : "N",
+                score.lsmBitErrors(),
+                score.v2BitErrors(),
                 score.flagsString()
             ));
         }
@@ -281,6 +284,75 @@ public class TransmissionScoringTest
         System.out.println(String.format("Avg LSM Score:       %.1f%%", avgLsmScore));
         System.out.println(String.format("Avg v2 Score:        %.1f%%", avgV2Score));
         System.out.println(String.format("v2 Improvement:      %+.1f%%", avgV2Score - avgLsmScore));
+        System.out.println();
+    }
+
+    private static void printErrorMetrics(List<TransmissionScore> scores,
+                                          LSMv2ComparisonTest.DecoderStats lsmStats,
+                                          LSMv2ComparisonTest.DecoderStats v2Stats)
+    {
+        System.out.println("=== ERROR METRICS ===");
+        System.out.println(String.format("%-30s %10s %10s %10s", "", "LSM", "v2", "Delta"));
+        System.out.println("-".repeat(62));
+
+        // Total/Valid/Invalid Messages
+        System.out.println(String.format("%-30s %10d %10d %+10d", "Total Messages",
+            lsmStats.totalMessages, v2Stats.totalMessages,
+            v2Stats.totalMessages - lsmStats.totalMessages));
+        System.out.println(String.format("%-30s %10d %10d %+10d", "Valid Messages",
+            lsmStats.validMessages, v2Stats.validMessages,
+            v2Stats.validMessages - lsmStats.validMessages));
+        System.out.println(String.format("%-30s %10d %10d %+10d", "Invalid Messages",
+            lsmStats.invalidMessages, v2Stats.invalidMessages,
+            v2Stats.invalidMessages - lsmStats.invalidMessages));
+
+        // Bit error stats
+        System.out.println(String.format("%-30s %10d %10d %+10d", "Messages with Bit Errors",
+            lsmStats.messagesWithBitErrors, v2Stats.messagesWithBitErrors,
+            v2Stats.messagesWithBitErrors - lsmStats.messagesWithBitErrors));
+        System.out.println(String.format("%-30s %10d %10d %+10d", "Total Bit Errors Corrected",
+            lsmStats.bitErrors, v2Stats.bitErrors,
+            v2Stats.bitErrors - lsmStats.bitErrors));
+        System.out.println(String.format("%-30s %10d %10d %+10d", "Max Errors in Single Msg",
+            lsmStats.maxBitErrorsPerMessage, v2Stats.maxBitErrorsPerMessage,
+            v2Stats.maxBitErrorsPerMessage - lsmStats.maxBitErrorsPerMessage));
+
+        // Rate metrics
+        System.out.println(String.format("%-30s %9.2f%% %9.2f%% %+9.2f%%", "Est. Bit Error Rate (BER)",
+            lsmStats.estimatedBER(), v2Stats.estimatedBER(),
+            v2Stats.estimatedBER() - lsmStats.estimatedBER()));
+        System.out.println(String.format("%-30s %9.1f%% %9.1f%% %+9.1f%%", "Error-Free Message Rate",
+            lsmStats.errorFreeMessageRate(), v2Stats.errorFreeMessageRate(),
+            v2Stats.errorFreeMessageRate() - lsmStats.errorFreeMessageRate()));
+        System.out.println(String.format("%-30s %9.1f%% %9.1f%% %+9.1f%%", "Valid Message Rate",
+            lsmStats.validMessageRate(), v2Stats.validMessageRate(),
+            v2Stats.validMessageRate() - lsmStats.validMessageRate()));
+
+        // v2-only sync/NID diagnostics
+        if(v2Stats.syncDetectionCount > 0)
+        {
+            System.out.println();
+            System.out.println("=== SYNC/NID DIAGNOSTICS (v2 only) ===");
+            System.out.println(String.format("Sync Detections:          %d", v2Stats.syncDetectionCount));
+            System.out.println(String.format("NID Decode Success:       %d (%.1f%%)",
+                v2Stats.nidDecodeSuccessCount, v2Stats.nidSuccessRate()));
+            System.out.println(String.format("NID Decode Fail:          %d (%.1f%%)",
+                v2Stats.nidDecodeFailCount,
+                v2Stats.syncDetectionCount > 0 ?
+                    (double)v2Stats.nidDecodeFailCount / v2Stats.syncDetectionCount * 100.0 : 0));
+            System.out.println(String.format("  Fallback Sync:          %d (%.1f%%)",
+                v2Stats.fallbackSyncCount,
+                v2Stats.syncDetectionCount > 0 ?
+                    (double)v2Stats.fallbackSyncCount / v2Stats.syncDetectionCount * 100.0 : 0));
+            System.out.println(String.format("  Boundary Recovery:      %d (%.1f%%)",
+                v2Stats.recoverySyncCount,
+                v2Stats.syncDetectionCount > 0 ?
+                    (double)v2Stats.recoverySyncCount / v2Stats.syncDetectionCount * 100.0 : 0));
+            System.out.println(String.format("  Fade Recovery:          %d (%.1f%%)",
+                v2Stats.fadeRecoverySyncCount,
+                v2Stats.syncDetectionCount > 0 ?
+                    (double)v2Stats.fadeRecoverySyncCount / v2Stats.syncDetectionCount * 100.0 : 0));
+        }
         System.out.println();
     }
 
@@ -363,10 +435,16 @@ public class TransmissionScoringTest
                 if(message.isValid())
                 {
                     stats.validMessages++;
-                    if(message.getMessage() != null)
+                    int correctedBits = message.getMessage() != null ?
+                        Math.max(message.getMessage().getCorrectedBitCount(), 0) : 0;
+                    if(correctedBits > 0)
                     {
-                        stats.bitErrors += Math.max(message.getMessage().getCorrectedBitCount(), 0);
+                        stats.messagesWithBitErrors++;
+                        stats.maxBitErrorsPerMessage = Math.max(stats.maxBitErrorsPerMessage, correctedBits);
+                        stats.messageBitErrors.add(new long[]{message.getTimestamp(), correctedBits});
                     }
+                    stats.bitErrors += correctedBits;
+
                     P25P1DataUnitID duid = message.getDUID();
                     if(duid == P25P1DataUnitID.LOGICAL_LINK_DATA_UNIT_1 ||
                        duid == P25P1DataUnitID.LOGICAL_LINK_DATA_UNIT_2)
@@ -383,6 +461,11 @@ public class TransmissionScoringTest
                     {
                         stats.tduTimestamps.add(message.getTimestamp());
                     }
+                }
+                else
+                {
+                    stats.invalidMessages++;
+                    stats.invalidMessageTimestamps.add(message.getTimestamp());
                 }
             }
             else if(iMessage instanceof SyncLossMessage syncLoss)
@@ -414,6 +497,16 @@ public class TransmissionScoringTest
                 });
 
                 while(source.next(2048)) { }
+
+                // Capture framer diagnostics for error rate analysis
+                P25P1MessageFramer framer = decoder.getMessageFramer();
+                stats.syncDetectionCount = framer.getSyncDetectionCount();
+                stats.nidDecodeSuccessCount = framer.getNIDDecodeSuccessCount();
+                stats.nidDecodeFailCount = framer.getNIDDecodeFailCount();
+                stats.fallbackSyncCount = framer.getFallbackSyncCount();
+                stats.recoverySyncCount = framer.getRecoverySyncCount();
+                stats.fadeRecoverySyncCount = framer.getFadeRecoverySyncCount();
+
                 decoder.stop();
             }
             else

@@ -73,6 +73,24 @@ public class TransmissionScorer
             tx.endMs(), BOUNDARY_TOLERANCE_MS,
             v2Stats.tduTimestamps, baseTimestamp);
 
+        // Count bit errors within transmission
+        int lsmBitErrors = sumBitErrorsInRange(
+            tx.startMs(), tx.endMs(),
+            lsmStats.messageBitErrors, baseTimestamp);
+
+        int v2BitErrors = sumBitErrorsInRange(
+            tx.startMs(), tx.endMs(),
+            v2Stats.messageBitErrors, baseTimestamp);
+
+        // Count invalid messages within transmission
+        int lsmInvalidMessages = countMessagesInRange(
+            tx.startMs(), tx.endMs(),
+            lsmStats.invalidMessageTimestamps, baseTimestamp);
+
+        int v2InvalidMessages = countMessagesInRange(
+            tx.startMs(), tx.endMs(),
+            v2Stats.invalidMessageTimestamps, baseTimestamp);
+
         return new TransmissionScore(
             tx,
             lsmLduCount,
@@ -80,7 +98,11 @@ public class TransmissionScorer
             lsmHasHDU,
             v2HasHDU,
             lsmHasTDU,
-            v2HasTDU
+            v2HasTDU,
+            lsmBitErrors,
+            v2BitErrors,
+            lsmInvalidMessages,
+            v2InvalidMessages
         );
     }
 
@@ -129,5 +151,29 @@ public class TransmissionScorer
             }
         }
         return false;
+    }
+
+    /**
+     * Sums bit errors from messages within the specified time range.
+     *
+     * @param startMs transmission start time
+     * @param endMs transmission end time
+     * @param bitErrors list of [timestamp, bitErrors] arrays
+     * @param baseTimestamp base time for normalizing timestamps
+     * @return total bit errors within range
+     */
+    private int sumBitErrorsInRange(long startMs, long endMs, List<long[]> bitErrors, long baseTimestamp)
+    {
+        int total = 0;
+        for(long[] entry : bitErrors)
+        {
+            long normalizedTs = entry[0] - baseTimestamp;
+            if(normalizedTs >= (startMs - MATCH_TOLERANCE_MS) &&
+               normalizedTs <= (endMs + MATCH_TOLERANCE_MS))
+            {
+                total += (int)entry[1];
+            }
+        }
+        return total;
     }
 }
