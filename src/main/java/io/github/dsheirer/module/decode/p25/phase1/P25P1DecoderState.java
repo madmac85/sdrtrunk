@@ -41,6 +41,7 @@ import io.github.dsheirer.identifier.patch.PatchGroupPreLoadDataContent;
 import io.github.dsheirer.identifier.radio.RadioIdentifier;
 import io.github.dsheirer.log.LoggingSuppressor;
 import io.github.dsheirer.message.IMessage;
+import io.github.dsheirer.message.SyncLossMessage;
 import io.github.dsheirer.module.decode.DecoderType;
 import io.github.dsheirer.module.decode.event.DecodeEvent;
 import io.github.dsheirer.module.decode.event.DecodeEventType;
@@ -173,6 +174,10 @@ import io.github.dsheirer.sample.Listener;
 import io.github.dsheirer.util.PacketUtil;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import org.jdesktop.swingx.mapviewer.GeoPosition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -200,6 +205,12 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
     private long mLastValidLDUTimestamp = 0;
     private int mHoldoverMs = DecodeConfigP25Phase1.DEFAULT_AUDIO_HOLDOVER_MS;
     private boolean mHoldoverActive = false;
+
+    // Periodic holdover check for extended call continuity
+    private static final int HOLDOVER_CHECK_INTERVAL_MS = 100;
+    private static final int EXTENDED_HOLDOVER_GRACE_MS = 500;
+    private ScheduledExecutorService mHoldoverExecutor;
+    private ScheduledFuture<?> mHoldoverTask;
 
     /**
      * Constructs an APCO-25 decoder state with an optional traffic channel manager.
@@ -360,6 +371,10 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
         else if(iMessage instanceof LinkControlWord lcw)
         {
             processLC(lcw, iMessage.getTimestamp(), false);
+        }
+        else if(iMessage instanceof SyncLossMessage syncLoss)
+        {
+            processSyncLoss(syncLoss);
         }
     }
 
@@ -944,6 +959,9 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
         {
             mLastValidLDUTimestamp = message.getTimestamp();
             mHoldoverActive = false;
+
+            // Start periodic holdover check to maintain call continuity during sync loss
+            startPeriodicHoldoverCheck();
         }
         else
         {
@@ -984,6 +1002,39 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
     }
 
     /**
+     * Process sync loss message to maintain call continuity when signal is still present.
+     * During sync loss, if signal energy indicates an active transmission, broadcast
+     * CONTINUATION events to keep the call alive.
+     *
+     * @param syncLoss the sync loss message
+     */
+    private void processSyncLoss(SyncLossMessage syncLoss)
+    {
+        // Only apply holdover during sync loss if enabled and we have an active call
+        if(mSignalEnergyProvider == null || mLastValidLDUTimestamp == 0)
+        {
+            return;
+        }
+
+        // Check if signal energy indicates an active transmission
+        if(mSignalEnergyProvider.isSignalPresent())
+        {
+            long timeSinceLastValidLDU = syncLoss.getTimestamp() - mLastValidLDUTimestamp;
+
+            // Use extended holdover period for sync loss (holdoverMs + 500ms grace)
+            // This allows more time during sync loss since we can't receive LDU messages
+            int extendedHoldoverMs = mHoldoverMs + 500;
+
+            if(timeSinceLastValidLDU <= extendedHoldoverMs)
+            {
+                // Broadcast continuation event to keep the call state alive during sync loss
+                broadcast(new DecoderStateEvent(this, Event.CONTINUATION, State.CALL));
+                mHoldoverActive = true;
+            }
+        }
+    }
+
+    /**
      * Process Terminator Data Unit (TDU).
      */
     private void processTDU(P25P1Message message)
@@ -991,6 +1042,7 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
         // Reset holdover state - transmission explicitly ended
         mLastValidLDUTimestamp = 0;
         mHoldoverActive = false;
+        stopPeriodicHoldoverCheck();
 
         mTrafficChannelManager.processP1TrafficCallEnd(getCurrentFrequency(), message.getTimestamp(), "TDU:" + message);
         broadcast(new DecoderStateEvent(this, Event.DECODE, State.ACTIVE));
@@ -1007,6 +1059,7 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
         // Reset holdover state - transmission explicitly ended
         mLastValidLDUTimestamp = 0;
         mHoldoverActive = false;
+        stopPeriodicHoldoverCheck();
 
         if(message instanceof TDULCMessage tdulc)
         {
@@ -2262,7 +2315,109 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
     }
 
     @Override
+    public void stop()
+    {
+        super.stop();
+        stopPeriodicHoldoverCheck();
+    }
+
+    @Override
     public void init()
     {
+    }
+
+    /**
+     * Starts the periodic holdover check that runs independently of message receipt.
+     * This ensures CONTINUATION events are generated even when sync is lost and
+     * no LDU messages are being received, as long as signal energy indicates
+     * an active transmission.
+     */
+    private void startPeriodicHoldoverCheck()
+    {
+        if(mSignalEnergyProvider == null)
+        {
+            return; // No point running without signal energy provider
+        }
+
+        if(mHoldoverExecutor == null)
+        {
+            mHoldoverExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "P25-Holdover-Check");
+                t.setDaemon(true);
+                return t;
+            });
+        }
+
+        if(mHoldoverTask == null || mHoldoverTask.isDone())
+        {
+            mHoldoverTask = mHoldoverExecutor.scheduleAtFixedRate(
+                this::periodicHoldoverCheck,
+                HOLDOVER_CHECK_INTERVAL_MS,
+                HOLDOVER_CHECK_INTERVAL_MS,
+                TimeUnit.MILLISECONDS);
+        }
+    }
+
+    /**
+     * Stops the periodic holdover check.
+     */
+    private void stopPeriodicHoldoverCheck()
+    {
+        if(mHoldoverTask != null)
+        {
+            mHoldoverTask.cancel(false);
+            mHoldoverTask = null;
+        }
+
+        if(mHoldoverExecutor != null)
+        {
+            mHoldoverExecutor.shutdownNow();
+            mHoldoverExecutor = null;
+        }
+    }
+
+    /**
+     * Periodic check that broadcasts CONTINUATION events when signal is present
+     * but no messages are being received. This keeps the call alive during
+     * extended sync loss periods when RF signal indicates transmission is active.
+     */
+    private void periodicHoldoverCheck()
+    {
+        try
+        {
+            if(mSignalEnergyProvider == null || mLastValidLDUTimestamp == 0)
+            {
+                return;
+            }
+
+            // Check if signal energy indicates an active transmission
+            if(mSignalEnergyProvider.isSignalPresent())
+            {
+                long timeSinceLastValidLDU = System.currentTimeMillis() - mLastValidLDUTimestamp;
+
+                // Use extended holdover period (holdoverMs + grace) for periodic check
+                int extendedHoldoverMs = mHoldoverMs + EXTENDED_HOLDOVER_GRACE_MS;
+
+                if(timeSinceLastValidLDU <= extendedHoldoverMs)
+                {
+                    // Broadcast continuation event to keep the call state alive
+                    broadcast(new DecoderStateEvent(this, Event.CONTINUATION, State.CALL));
+                    mHoldoverActive = true;
+                }
+                else
+                {
+                    // Extended holdover expired - stop the periodic check
+                    if(mHoldoverTask != null)
+                    {
+                        mHoldoverTask.cancel(false);
+                        mHoldoverTask = null;
+                    }
+                }
+            }
+        }
+        catch(Exception e)
+        {
+            LOGGER.error("Error in periodic holdover check", e);
+        }
     }
 }

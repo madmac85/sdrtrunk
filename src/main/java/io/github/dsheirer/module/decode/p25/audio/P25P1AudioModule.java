@@ -28,6 +28,7 @@ import io.github.dsheirer.module.decode.p25.phase1.message.hdu.HDUMessage;
 import io.github.dsheirer.module.decode.p25.phase1.message.ldu.LDU1Message;
 import io.github.dsheirer.module.decode.p25.phase1.message.ldu.LDU2Message;
 import io.github.dsheirer.module.decode.p25.phase1.message.ldu.LDUMessage;
+import io.github.dsheirer.module.decode.p25.phase1.ISignalEnergyProvider;
 import io.github.dsheirer.preference.UserPreferences;
 import io.github.dsheirer.sample.Listener;
 import java.util.ArrayList;
@@ -35,6 +36,12 @@ import java.util.List;
 
 public class P25P1AudioModule extends ImbeAudioModule
 {
+    /**
+     * Grace period in milliseconds to delay audio segment closure when signal is still present.
+     * This allows time for sync to recover during brief decode errors.
+     */
+    private static final long AUDIO_GRACE_PERIOD_MS = 300;
+
     private boolean mEncryptedCall = false;
     private boolean mEncryptedCallStateEstablished = false;
 
@@ -42,9 +49,25 @@ public class P25P1AudioModule extends ImbeAudioModule
     private NonClippingGain mGain = new NonClippingGain(5.0f, 0.95f);
     private List<LDUMessage> mCachedLDUMessages = new ArrayList<>();
 
+    // Signal energy provider for audio continuity decisions
+    private ISignalEnergyProvider mSignalEnergyProvider;
+    private long mGracePeriodEndTime = 0;
+
     public P25P1AudioModule(UserPreferences userPreferences, AliasList aliasList)
     {
         super(userPreferences, aliasList);
+    }
+
+    /**
+     * Sets the signal energy provider used for audio continuity decisions.
+     * When set, the audio module can delay closing audio segments during
+     * squelch events if signal energy indicates an active transmission.
+     *
+     * @param provider the signal energy provider, or null to disable signal-aware squelch
+     */
+    public void setSignalEnergyProvider(ISignalEnergyProvider provider)
+    {
+        mSignalEnergyProvider = provider;
     }
 
     @Override
@@ -152,6 +175,10 @@ public class P25P1AudioModule extends ImbeAudioModule
      * Wrapper for squelch state to process end of call actions.  At call end the encrypted call state established
      * flag is reset so that the encrypted audio state for the next call can be properly detected and we send an
      * END audio packet so that downstream processors like the audio recorder can properly close out a call sequence.
+     *
+     * When a signal energy provider is configured, the audio module will delay closing the audio segment
+     * during squelch events if signal energy indicates an active transmission is still present. This provides
+     * a grace period for sync to recover during brief decode errors, improving call continuity.
      */
     public class SquelchStateListener implements Listener<SquelchStateEvent>
     {
@@ -160,10 +187,34 @@ public class P25P1AudioModule extends ImbeAudioModule
         {
             if(event.getSquelchState() == SquelchState.SQUELCH)
             {
+                // If signal is still present, delay closing the audio segment
+                if(mSignalEnergyProvider != null && mSignalEnergyProvider.isSignalPresent())
+                {
+                    // Start grace period if not already in one
+                    if(mGracePeriodEndTime == 0)
+                    {
+                        mGracePeriodEndTime = System.currentTimeMillis() + AUDIO_GRACE_PERIOD_MS;
+                        return; // Don't close yet - wait for grace period
+                    }
+                    // Still in grace period - don't close yet
+                    else if(System.currentTimeMillis() < mGracePeriodEndTime)
+                    {
+                        return;
+                    }
+                    // Grace period expired - fall through to close
+                }
+
+                // Signal not present or grace period expired - close the audio segment
                 closeAudioSegment();
+                mGracePeriodEndTime = 0;
                 mEncryptedCallStateEstablished = false;
                 mEncryptedCall = false;
                 mCachedLDUMessages.clear();
+            }
+            else if(event.getSquelchState() == SquelchState.UNSQUELCH)
+            {
+                // Reset grace period state when a new call starts
+                mGracePeriodEndTime = 0;
             }
         }
     }

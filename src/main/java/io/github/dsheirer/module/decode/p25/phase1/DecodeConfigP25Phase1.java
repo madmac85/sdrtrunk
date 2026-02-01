@@ -41,9 +41,10 @@ public class DecodeConfigP25Phase1 extends DecodeConfigP25
     public static final int DEFAULT_AUDIO_HOLDOVER_MS = 180;
 
     /**
-     * Maximum audio holdover period in milliseconds
+     * Maximum audio holdover period in milliseconds.
+     * Increased to 500ms to better handle sync loss during active transmissions.
      */
-    public static final int MAX_AUDIO_HOLDOVER_MS = 250;
+    public static final int MAX_AUDIO_HOLDOVER_MS = 500;
 
     private Modulation mModulation = Modulation.C4FM;
     private int mConfiguredNAC = 0; // 0 = auto-detect, 1-4095 = configured NAC
