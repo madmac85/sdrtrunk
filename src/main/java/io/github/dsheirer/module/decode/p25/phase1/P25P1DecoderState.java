@@ -212,6 +212,9 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
     private ScheduledExecutorService mHoldoverExecutor;
     private ScheduledFuture<?> mHoldoverTask;
 
+    // Voice-only channel configuration
+    private boolean mIgnoreControlChannelState = false;
+
     /**
      * Constructs an APCO-25 decoder state with an optional traffic channel manager.
      * @param channel with configuration details
@@ -273,6 +276,19 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
     public void setHoldoverMs(int holdoverMs)
     {
         mHoldoverMs = Math.max(0, Math.min(holdoverMs, DecodeConfigP25Phase1.MAX_AUDIO_HOLDOVER_MS));
+    }
+
+    /**
+     * Sets whether control channel state detection should be ignored.
+     * When true, the decoder will never transition to CONTROL state, preventing false detections
+     * on voice-only channels caused by decode errors producing garbage data that resembles
+     * control channel messages.
+     *
+     * @param ignore true to bypass control channel state transitions
+     */
+    public void setIgnoreControlChannelState(boolean ignore)
+    {
+        mIgnoreControlChannelState = ignore;
     }
 
     /**
@@ -760,7 +776,24 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
             }
         }
 
-        broadcast(new DecoderStateEvent(this, Event.DECODE, State.CONTROL));
+        broadcastControlState();
+    }
+
+    /**
+     * Broadcasts a CONTROL state event unless control channel detection is disabled.
+     * When ignoreControlChannelState is true, broadcasts IDLE instead to prevent
+     * false control channel detections on voice-only channels.
+     */
+    private void broadcastControlState()
+    {
+        if(mIgnoreControlChannelState)
+        {
+            broadcast(new DecoderStateEvent(this, Event.DECODE, State.IDLE));
+        }
+        else
+        {
+            broadcastControlState();
+        }
     }
 
     /**
@@ -1112,7 +1145,7 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
                     "TELEPHONE INTERCONNECT:" + tired.getTelephoneNumber());
         }
 
-        broadcast(new DecoderStateEvent(this, Event.DECODE, State.CONTROL));
+        broadcastControlState();
     }
 
     /**
@@ -1320,7 +1353,7 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
      */
     private void processTSBK(P25P1Message message)
     {
-        broadcast(new DecoderStateEvent(this, Event.DECODE, State.CONTROL));
+        broadcastControlState();
 
         if(message.isValid() && message instanceof TSBKMessage tsbk)
         {

@@ -1,0 +1,187 @@
+# Tasks: P25 LSM v2 Comprehensive Decode Optimization
+
+**Feature Branch**: `011-comprehensive-decode-optimization`
+**Spec**: [spec.md](./spec.md)
+**Plan**: [plan.md](./plan.md)
+
+## Phase 1: NID Enhancement
+
+### Task 1.1: Known-NAC NID Optimization
+**Priority**: P1 | **Effort**: Low | **Impact**: High
+
+- [ ] 1.1.1 Add `assumeKnownNAC` mode to P25P1MessageFramer
+- [ ] 1.1.2 When NAC is configured and `assumeKnownNAC` is enabled, try all 16 DUID values
+- [ ] 1.1.3 Select DUID that produces valid message structure
+- [ ] 1.1.4 Add configuration flag to DecodeConfigP25Phase1
+- [ ] 1.1.5 Write unit tests for known-NAC decode path
+- [ ] 1.1.6 Run regression tests on all sample files
+
+**Acceptance Criteria**:
+- Configured NAC channels show improved NID decode rate
+- No regression on auto-detect channels
+
+### Task 1.2: Soft-Decision NID Decoding (Future)
+**Priority**: P2 | **Effort**: High | **Impact**: Medium
+
+- [ ] 1.2.1 Research Chase algorithm for BCH soft decoding
+- [ ] 1.2.2 Capture soft symbol values during sync correlation
+- [ ] 1.2.3 Implement BCH_63_16_23_Soft decoder class
+- [ ] 1.2.4 Integrate soft decoder into message framer
+- [ ] 1.2.5 Benchmark performance impact
+- [ ] 1.2.6 A/B test against hard-decision decoder
+
+---
+
+## Phase 2: Audio Frame Error Detection and Concealment
+
+### Task 2.1: IMBE Frame Validator
+**Priority**: P1 | **Effort**: Medium | **Impact**: High
+
+- [ ] 2.1.1 Create IMBEFrameValidator class
+- [ ] 2.1.2 Implement Hamming(10,6,3) syndrome check for pitch/gain bits
+- [ ] 2.1.3 Implement energy consistency check (frame-to-frame delta)
+- [ ] 2.1.4 Add bit pattern validity checks (reserved bits, ranges)
+- [ ] 2.1.5 Return suspicion score (0.0 = confident good, 1.0 = definitely bad)
+- [ ] 2.1.6 Write unit tests with known good/bad frames
+
+**Acceptance Criteria**:
+- Validator correctly identifies 90%+ of corrupted frames
+- False positive rate < 5% on clean audio
+
+### Task 2.2: Audio Concealment Implementation
+**Priority**: P1 | **Effort**: Medium | **Impact**: High
+
+- [ ] 2.2.1 Add `lastGoodFrame` tracking to P25P1AudioModule
+- [ ] 2.2.2 Implement REPEAT_LAST concealment strategy
+- [ ] 2.2.3 Implement SILENCE concealment strategy
+- [ ] 2.2.4 Add concealment statistics tracking
+- [ ] 2.2.5 Add configuration for concealment strategy selection
+- [ ] 2.2.6 Test with recordings containing known artifacts
+- [ ] 2.2.7 Conduct listening tests to verify improvement
+
+**Acceptance Criteria**:
+- Audio artifacts reduced by 80% measured by listening evaluation
+- No audible "digital garbage" on decode errors
+
+---
+
+## Phase 3: Adaptive Sync and Recovery
+
+### Task 3.1: Environment-Adaptive Sync Threshold
+**Priority**: P3 | **Effort**: Medium | **Impact**: Low
+
+- [ ] 3.1.1 Add sync success tracking (sliding window of last N attempts)
+- [ ] 3.1.2 Implement threshold adjustment algorithm
+- [ ] 3.1.3 Add bounds checking (MIN_THRESHOLD to MAX_THRESHOLD)
+- [ ] 3.1.4 Add diagnostic logging for threshold changes
+- [ ] 3.1.5 Test on samples with varying signal quality
+- [ ] 3.1.6 Verify no runaway threshold adjustment
+
+### Task 3.2: Enhanced Fade Recovery
+**Priority**: P3 | **Effort**: Medium | **Impact**: Low
+
+- [ ] 3.2.1 Extend fade detection window configuration
+- [ ] 3.2.2 Add signal energy fade onset detection
+- [ ] 3.2.3 Implement frame boundary pre-positioning
+- [ ] 3.2.4 Add catch-up mode after extended fades
+- [ ] 3.2.5 Test fade recovery improvements on sample files
+
+---
+
+## Phase 4: Channel Configuration
+
+### Task 4.1: Encryption Detection Bypass
+**Priority**: P2 | **Effort**: Low | **Impact**: Medium
+
+- [ ] 4.1.1 Add `disableEncryptionDetection` to DecodeConfigP25Phase1
+- [ ] 4.1.2 Add getter/setter and XML persistence
+- [ ] 4.1.3 Modify P25P1AudioModule to bypass encryption wait when disabled
+- [ ] 4.1.4 Test that audio starts immediately on LDU1
+- [ ] 4.1.5 Verify no false encryption events on voice-only channel
+
+**Acceptance Criteria**:
+- Zero false encryption detections on configured voice-only channels
+- Audio begins processing on first LDU1 instead of waiting for LDU2
+
+### Task 4.2: Control Channel Detection Bypass
+**Priority**: P2 | **Effort**: Low | **Impact**: Medium
+
+- [ ] 4.2.1 Add `disableControlChannelDetection` to DecodeConfigP25Phase1
+- [ ] 4.2.2 Add getter/setter and XML persistence
+- [ ] 4.2.3 Modify P25P1DecoderState to never enter CONTROL state when disabled
+- [ ] 4.2.4 Test that no control channel transitions occur
+- [ ] 4.2.5 Verify normal call processing unaffected
+
+---
+
+## Phase 5: Research and Metrics Infrastructure
+
+### Task 5.1: Decode Quality Metrics
+**Priority**: P3 | **Effort**: Medium | **Impact**: Research
+
+- [ ] 5.1.1 Create DecodeQualityMetrics class
+- [ ] 5.1.2 Track sync detection rate by signal level
+- [ ] 5.1.3 Track NID decode success rate by DUID type
+- [ ] 5.1.4 Track bit error rate (pre/post correction)
+- [ ] 5.1.5 Track audio frame error rate
+- [ ] 5.1.6 Track concealment events
+- [ ] 5.1.7 Add metrics export to JSON/CSV
+
+### Task 5.2: Batch Analysis Tool
+**Priority**: P3 | **Effort**: Medium | **Impact**: Research
+
+- [ ] 5.2.1 Create BatchAnalysis main class
+- [ ] 5.2.2 Implement directory scanning for baseband files
+- [ ] 5.2.3 Process multiple files sequentially
+- [ ] 5.2.4 Generate comparative summary report
+- [ ] 5.2.5 Export metrics to CSV for external analysis
+- [ ] 5.2.6 Add progress reporting for large batches
+
+---
+
+## Integration and Testing
+
+### Task 6.1: Regression Testing
+**Priority**: P1 | **Effort**: Low | **Impact**: Critical
+
+- [ ] 6.1.1 Run LSMv2ComparisonTest on all 8 original samples
+- [ ] 6.1.2 Verify no reduction in LDU counts
+- [ ] 6.1.3 Verify no increase in sync losses
+- [ ] 6.1.4 Run TransmissionScoringTest on Roc West sample
+- [ ] 6.1.5 Document before/after metrics
+
+### Task 6.2: User Acceptance Testing
+**Priority**: P1 | **Effort**: Medium | **Impact**: High
+
+- [ ] 6.2.1 Create listening test protocol
+- [ ] 6.2.2 Select 10 representative transmission segments
+- [ ] 6.2.3 Generate before/after audio samples
+- [ ] 6.2.4 Conduct blind listening evaluation
+- [ ] 6.2.5 Document quality improvement ratings
+
+---
+
+## Progress Summary
+
+| Phase | Tasks | Completed | Status |
+|-------|-------|-----------|--------|
+| Phase 1: NID | 2 | 0 | Not Started |
+| Phase 2: Audio | 2 | 0 | Not Started |
+| Phase 3: Sync | 2 | 0 | Not Started |
+| Phase 4: Config | 2 | 0 | Not Started |
+| Phase 5: Metrics | 2 | 0 | Not Started |
+| Integration | 2 | 0 | Not Started |
+| **Total** | **12** | **0** | **0%** |
+
+## Recommended Implementation Order
+
+1. **Task 4.1**: Encryption Detection Bypass (quick win for spec channel)
+2. **Task 4.2**: Control Channel Detection Bypass (quick win)
+3. **Task 2.1**: IMBE Frame Validator (foundation for concealment)
+4. **Task 2.2**: Audio Concealment (immediate audio quality improvement)
+5. **Task 1.1**: Known-NAC NID Optimization (major decode improvement)
+6. **Task 6.1**: Regression Testing (verify changes)
+7. **Task 6.2**: User Acceptance Testing (validate quality improvement)
+8. **Task 3.x**: Adaptive Sync (incremental improvement)
+9. **Task 5.x**: Metrics Infrastructure (ongoing research support)
+10. **Task 1.2**: Soft-Decision NID (future enhancement)

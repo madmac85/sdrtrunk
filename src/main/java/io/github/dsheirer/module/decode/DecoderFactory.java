@@ -317,15 +317,28 @@ public class DecoderFactory
             mLog.warn("Expected non-null traffic channel manager for channel " + channel.getName());
         }
 
-        // Wire signal energy provider and holdover configuration for LSM v2 decoder
-        if(lsmv2Decoder != null && decoderState != null &&
-           channel.getDecodeConfiguration() instanceof DecodeConfigP25Phase1 p1Config)
+        // Wire signal energy provider, holdover, and voice-only channel configuration
+        if(channel.getDecodeConfiguration() instanceof DecodeConfigP25Phase1 p1Config)
         {
-            decoderState.setSignalEnergyProvider(lsmv2Decoder);
-            decoderState.setHoldoverMs(p1Config.getAudioHoldoverMs());
+            if(lsmv2Decoder != null && decoderState != null)
+            {
+                decoderState.setSignalEnergyProvider(lsmv2Decoder);
+                decoderState.setHoldoverMs(p1Config.getAudioHoldoverMs());
+            }
+            if(decoderState != null)
+            {
+                decoderState.setIgnoreControlChannelState(p1Config.isIgnoreControlChannelState());
+            }
         }
 
-        modules.add(new P25P1AudioModule(userPreferences, aliasList));
+        // Create audio module and configure voice-only channel options
+        P25P1AudioModule audioModule = new P25P1AudioModule(userPreferences, aliasList);
+        if(channel.getDecodeConfiguration() instanceof DecodeConfigP25Phase1 p1Config)
+        {
+            audioModule.setIgnoreEncryptionState(p1Config.isIgnoreEncryptionState());
+            audioModule.setConcealmentStrategy(p1Config.getAudioConcealment());
+        }
+        modules.add(audioModule);
 
         //Add a channel rotation monitor when we have multiple control channel frequencies specified
         if(channel.getSourceConfiguration() instanceof SourceConfigTunerMultipleFrequency sctmf &&
