@@ -48,17 +48,24 @@
 - Using existing timer infrastructure (rejected: decoder state doesn't have timer access)
 - Longer interval (rejected: might miss transitions)
 
-## 2026-02-01 - Audio Module Signal Energy Provider
+## 2026-02-02 - Removed Audio Module Grace Period (Bug Fix)
 
-**Context**: Need to wire signal energy awareness to audio module.
+**Context**: Audio segments were not closing properly. The "Now Playing" tab showed call ended, but audio notification still showed channel playing and recordings were not sent to RDIO until application exit.
 
-**Decision**: Added ISignalEnergyProvider setter to P25P1AudioModule and wired in DecoderFactory.
+**Decision**: Removed the signal-aware grace period from P25P1AudioModule entirely.
 
 **Rationale**:
-- Maintains separation of concerns - audio module doesn't need direct decoder reference
-- Interface allows different signal energy sources in future
-- Null-safe implementation maintains backwards compatibility
+- The grace period logic assumed SQUELCH events would arrive periodically to check expiration
+- In reality, SQUELCH is a one-time state change event (StateMonitoringSquelchController only fires when state changes)
+- When grace period started and we returned without closing, no follow-up events arrived
+- The audio segment stayed open indefinitely, preventing recordings from being sent to streaming services
+- The decoder state's holdover mechanism (SyncLossMessage handling + periodic CONTINUATION events) already prevents premature SQUELCH by keeping the state machine in CALL state
+- The audio module grace period was redundant and caused this critical bug
 
-**Alternatives Considered**:
-- Direct decoder reference (rejected: creates tight coupling)
-- Event-based communication (rejected: adds complexity for simple boolean check)
+**Bug Symptoms**:
+- Call ended in "Now Playing" tab
+- Audio notification area still showed channel playing
+- Recording never sent to RDIO during session
+- Recording only sent when application exited (cleanup)
+
+**Fix**: Reverted P25P1AudioModule.SquelchStateListener to original simple form that immediately closes audio segment on SQUELCH. The holdover protection now works at the decoder state layer only, which is the correct architectural placement.

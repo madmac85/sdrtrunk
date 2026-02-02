@@ -325,17 +325,7 @@ public class DecoderFactory
             decoderState.setHoldoverMs(p1Config.getAudioHoldoverMs());
         }
 
-        P25P1AudioModule audioModule = new P25P1AudioModule(userPreferences, aliasList);
-
-        // Wire signal energy provider to audio module for LSM v2 decoder
-        // This allows the audio module to delay closing audio segments during squelch
-        // when signal energy indicates an active transmission is still present
-        if(lsmv2Decoder != null)
-        {
-            audioModule.setSignalEnergyProvider(lsmv2Decoder);
-        }
-
-        modules.add(audioModule);
+        modules.add(new P25P1AudioModule(userPreferences, aliasList));
 
         //Add a channel rotation monitor when we have multiple control channel frequencies specified
         if(channel.getSourceConfiguration() instanceof SourceConfigTunerMultipleFrequency sctmf &&
