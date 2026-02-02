@@ -116,6 +116,22 @@
 - [x] 4.2.4 Test that no control channel transitions occur
 - [x] 4.2.5 Verify normal call processing unaffected
 
+### Task 4.3: Channel Configuration UI
+**Priority**: P2 | **Effort**: Low | **Impact**: Medium | **Status**: COMPLETE
+
+- [x] 4.3.1 Add ToggleSwitch for ignoreEncryptionState to P25P1ConfigurationEditor
+- [x] 4.3.2 Add ToggleSwitch for ignoreControlChannelState to P25P1ConfigurationEditor
+- [x] 4.3.3 Add ComboBox for audioConcealment strategy selection
+- [x] 4.3.4 Show/hide LSM v2 options based on modulation selection
+- [x] 4.3.5 Update setDecoderConfiguration() to load new settings
+- [x] 4.3.6 Update saveDecoderConfiguration() to save new settings
+- [x] 4.3.7 Verify backwards compatibility with existing XML configs
+
+**Acceptance Criteria**:
+- UI controls appear only when LSM v2 modulation is selected
+- Settings persist correctly through save/load cycle
+- Existing channel configs without new fields load without error
+
 ---
 
 ## Phase 5: Research and Metrics Infrastructure
@@ -172,10 +188,10 @@
 | Phase 1: NID | 2 | 1 | 50% (1.1 already done, 1.2 deferred) |
 | Phase 2: Audio | 2 | 1.5 | 75% Complete |
 | Phase 3: Sync | 2 | 0 | Not Started |
-| Phase 4: Config | 2 | 2 | **Complete** |
+| Phase 4: Config | 3 | 3 | **Complete** (incl. UI) |
 | Phase 5: Metrics | 2 | 0 | Not Started |
 | Integration | 2 | 0 | Not Started |
-| **Total** | **12** | **4.5** | **38%** |
+| **Total** | **13** | **5.5** | **42%** |
 
 ## Recommended Implementation Order
 
