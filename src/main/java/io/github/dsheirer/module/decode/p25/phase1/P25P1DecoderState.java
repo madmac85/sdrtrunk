@@ -792,7 +792,7 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
         }
         else
         {
-            broadcastControlState();
+            broadcast(new DecoderStateEvent(this, Event.DECODE, State.CONTROL));
         }
     }
 
