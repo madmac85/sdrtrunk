@@ -512,6 +512,8 @@ public class PlaylistManager implements Listener<ChannelEvent>
         PlaylistPreference files = mUserPreferences.getPlaylistPreference();
 
         PlaylistV2 playlist = null;
+        boolean playlistFileExists = false;
+        boolean parseError = false;
 
         //Check for a lock file that indicates the previous save attempt was incomplete or had an error
         if(Files.exists(files.getPlaylistLock()))
@@ -541,6 +543,7 @@ public class PlaylistManager implements Listener<ChannelEvent>
 
         if(Files.exists(files.getPlaylist()))
         {
+            playlistFileExists = true;
             mLog.info("Loading playlist [" + files.getPlaylist().toString() + "]");
 
             JacksonXmlModule xmlModule = new JacksonXmlModule();
@@ -559,11 +562,13 @@ public class PlaylistManager implements Listener<ChannelEvent>
             }
             catch(IOException ioe)
             {
-                mLog.error("IO error while reading playlist file", ioe);
+                mLog.error("IO error while reading playlist file - playlist will NOT be overwritten", ioe);
+                parseError = true;
             }
         }
         else if(Files.exists(files.getLegacyPlaylist()))
         {
+            playlistFileExists = true;
             mLog.info("Loading legacy playlist [" + files.getLegacyPlaylist().toString() + "]");
 
             JacksonXmlModule xmlModule = new JacksonXmlModule();
@@ -584,7 +589,8 @@ public class PlaylistManager implements Listener<ChannelEvent>
             }
             catch(IOException ioe)
             {
-                mLog.error("IO error while reading playlist file", ioe);
+                mLog.error("IO error while reading legacy playlist file - playlist will NOT be overwritten", ioe);
+                parseError = true;
             }
         }
         else
@@ -595,7 +601,18 @@ public class PlaylistManager implements Listener<ChannelEvent>
         if(playlist == null)
         {
             playlist = new PlaylistV2();
-            schedulePlaylistSave();
+
+            // Only save a new empty playlist if no playlist file existed.
+            // If a file existed but failed to parse, do NOT overwrite it - user data would be lost.
+            if(!playlistFileExists)
+            {
+                schedulePlaylistSave();
+            }
+            else if(parseError)
+            {
+                mLog.warn("Playlist file exists but could not be parsed. Using empty playlist in memory. " +
+                    "The original file has been preserved - please check the file format or restore from backup.");
+            }
         }
 
         return playlist;
