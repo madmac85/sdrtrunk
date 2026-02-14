@@ -549,7 +549,8 @@ public class PlaylistManager implements Listener<ChannelEvent>
             JacksonXmlModule xmlModule = new JacksonXmlModule();
             xmlModule.setDefaultUseWrapper(false);
             ObjectMapper objectMapper = new XmlMapper(xmlModule)
-                .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+                .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+                .configure(DeserializationFeature.READ_UNKNOWN_ENUM_VALUES_USING_DEFAULT_VALUE, true);
 
             try(InputStream in = Files.newInputStream(files.getPlaylist()))
             {
@@ -574,7 +575,8 @@ public class PlaylistManager implements Listener<ChannelEvent>
             JacksonXmlModule xmlModule = new JacksonXmlModule();
             xmlModule.setDefaultUseWrapper(false);
             ObjectMapper objectMapper = new XmlMapper(xmlModule)
-                .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+                .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+                .configure(DeserializationFeature.READ_UNKNOWN_ENUM_VALUES_USING_DEFAULT_VALUE, true);
 
             try(InputStream in = Files.newInputStream(files.getLegacyPlaylist()))
             {

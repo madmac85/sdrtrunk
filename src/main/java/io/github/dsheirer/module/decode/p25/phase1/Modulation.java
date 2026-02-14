@@ -19,11 +19,14 @@
 
 package io.github.dsheirer.module.decode.p25.phase1;
 
+import com.fasterxml.jackson.annotation.JsonEnumDefaultValue;
+
 /**
  * P25 Phase 1 Modulations enumeration.
  */
 public enum Modulation
 {
+    @JsonEnumDefaultValue
     CQPSK("Simulcast (LSM)"),
     CQPSK_V2("Conventional (LSM v2)"),
     C4FM("Normal (C4FM)");
