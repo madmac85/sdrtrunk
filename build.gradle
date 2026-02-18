@@ -566,3 +566,64 @@ tasks.register('runMissedTransmissionAnalysis', JavaExec) {
     }
     args = argsList
 }
+
+/**
+ * 3-way decoder comparison: runs C4FM, LSM, and LSM v2 decoders against baseband recordings.
+ * Usage: ./gradlew runDerryComparison -Pdir=path/to/samples [-Pnac=117]
+ *    or: ./gradlew runDerryComparison -PbasebandFile=path/to/file.wav [-Pnac=117]
+ */
+tasks.register('runDerryComparison', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.dsheirer.module.decode.p25.phase1.DerryDecoderComparisonTest'
+    if(os.isWindows()) {
+        jvmArgs = jvmArgsWindows
+    } else {
+        jvmArgs = jvmArgsLinux
+    }
+    def argsList = []
+    if(project.hasProperty('dir')) {
+        argsList.add('--dir')
+        argsList.add(project.property('dir'))
+    }
+    if(project.hasProperty('basebandFile')) {
+        argsList.add(project.property('basebandFile'))
+    }
+    if(project.hasProperty('nac')) {
+        argsList.add(project.property('nac'))
+    }
+    args = argsList
+}
+
+/**
+ * Audio regression test: processes baseband WAV segments through C4FM decoder with JMBE decoding.
+ * Usage: ./gradlew runDerryAudioRegression -Pbaseband=path/to/segment.wav -Pjmbe=path/to/jmbe.jar -Poutput=path/to/output [-Pmode=both]
+ * Modes: fixed (default), broken, both
+ */
+tasks.register('runDerryAudioRegression', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.dsheirer.module.decode.p25.phase1.DerryAudioRegressionTest'
+    if(os.isWindows()) {
+        jvmArgs = jvmArgsWindows
+    } else {
+        jvmArgs = jvmArgsLinux
+    }
+    def argsList = []
+    if(project.hasProperty('baseband')) {
+        argsList.add(project.property('baseband'))
+    }
+    if(project.hasProperty('jmbe')) {
+        argsList.add(project.property('jmbe'))
+    }
+    if(project.hasProperty('output')) {
+        argsList.add(project.property('output'))
+    }
+    if(project.hasProperty('mode')) {
+        argsList.add(project.property('mode'))
+    }
+    if(project.hasProperty('codecReset')) {
+        argsList.add(project.property('codecReset'))
+    }
+    args = argsList
+}

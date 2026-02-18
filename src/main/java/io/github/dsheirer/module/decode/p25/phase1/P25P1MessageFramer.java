@@ -75,6 +75,9 @@ public class P25P1MessageFramer
     private int mStatusSymbolDibitCounter = 36; //Set to 1-greater than the suppression trigger at 35 dibits
     private long mReferenceTimestamp = 0;
     private P25P1MessageAssembler mMessageAssembler;
+    //Package-private for testing: when true, blocks sync detections during active assembly (upstream audio squeak fix).
+    //When false, accepts all syncs unconditionally (pre-merge behavior). Default true preserves upstream behavior.
+    boolean mSyncGuardEnabled = true;
     private P25P1DataUnitID mPreviousDataUnitID = P25P1DataUnitID.PLACE_HOLDER;
     private P25P1DataUnitID mDetectedDataUnitID = P25P1DataUnitID.PLACE_HOLDER;
     private int mDetectedNAC = 0;
@@ -87,6 +90,7 @@ public class P25P1MessageFramer
     private int mSyncDetectionCount = 0;
     private int mNIDDecodeSuccessCount = 0;
     private int mNIDDecodeFailCount = 0;
+    int mSyncBlockedCount = 0; //Package-private for testing: count of syncs blocked by the guard
 
     // Strategy 1: Adaptive sync threshold based on signal energy
     private ISignalEnergyProvider mEnergyProvider;
@@ -240,15 +244,42 @@ public class P25P1MessageFramer
 
     /**
      * Externally triggered sync detection.
+     *
+     * The sync guard (de0e722f) blocks false syncs that arrive mid-assembly to prevent audio squeaks caused by
+     * premature force-completion of LDU assemblers.  However, the guard must allow syncs during PLACEHOLDER assembly
+     * to enable recovery from sample drops.  Without this exception, dropped samples cause a cascading failure:
+     * corrupted assembler → placeholder assembler → blocked syncs → new placeholder → blocked syncs, with recovery
+     * only possible in a ~12ms window between placeholders (~3% chance per message boundary).  This can lock out
+     * sync recovery for 10+ seconds, corrupting an entire call's audio.
+     *
+     * The fix: allow sync detection when the current assembler is a speculative PLACEHOLDER (NID decode failed).
+     * Real message assembly (LDU, HDU, TDU, etc.) remains protected by the guard.
      */
     public void syncDetected()
     {
-        //Only allow sync detection processing if we're not currently assembling a message
-        if(mMessageAssembler == null)
+        //When the sync guard is disabled, accept all sync detections unconditionally (pre-merge behavior).
+        if(!mSyncGuardEnabled)
         {
             mSyncDetected = true;
             mNIDPointer = 0;
             mSyncDetectionCount++;
+            return;
+        }
+
+        //Allow sync detection when no assembler is active, or when the assembler is a speculative placeholder.
+        //Placeholders are created when NID decode fails — they collect data speculatively but are discarded on
+        //dispatch.  Blocking syncs during placeholder assembly prevents recovery from sample drops/discontinuities
+        //that corrupt the demodulator state.  Real message assembly (known DUIDs) remains protected.
+        if(mMessageAssembler == null ||
+           mMessageAssembler.getDataUnitID() == P25P1DataUnitID.PLACE_HOLDER)
+        {
+            mSyncDetected = true;
+            mNIDPointer = 0;
+            mSyncDetectionCount++;
+        }
+        else
+        {
+            mSyncBlockedCount++;
         }
     }
 
@@ -1046,6 +1077,15 @@ public class P25P1MessageFramer
     public int getSyncDetectionCount()
     {
         return mSyncDetectionCount;
+    }
+
+    /**
+     * Returns the count of sync detections that were blocked by the guard because a message
+     * was still being assembled.
+     */
+    public int getSyncBlockedCount()
+    {
+        return mSyncBlockedCount;
     }
 
     /**
