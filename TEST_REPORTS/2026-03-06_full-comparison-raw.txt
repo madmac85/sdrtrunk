@@ -1,0 +1,273 @@
+================================================================================
+DECODE QUALITY COMPARISON REPORT
+================================================================================
+
+  Rock County PD W
+    File: 20260124_155626_154815000_Rockingham-County_Law-Enforcement_Rock-County-PD-W_9_baseband.wav
+    Mod: CQPSK_V2 | NAC: 117 | Tuner: RTL-2832/R828D 201
+    LDU:      455 →    450  (-5 ↓ (-1.1%))
+    Valid:   3305 →   3253
+    Sync Blocked:      0 →   1572
+    Signal Time:  131.0s →  131.0s | Decode: 62.5% → 61.8%
+
+  Rock County PD E
+    File: 20260124_155903_154950000_Rockingham-County_Law-Enforcement_Rock-County-PD-E_8_baseband.wav
+    Mod: CQPSK_V2 | NAC: 117 | Tuner: RTL-2832/R828D 201
+    LDU:      107 →    107  (+0 = (+0.0%))
+    Valid:   1667 →   1651
+    Sync Blocked:      0 →    407
+    Signal Time:   27.5s →   27.5s | Decode: 70.0% → 70.0%
+
+  Rock County PD W
+    File: 20260124_170708_154815000_Rockingham-County_Law-Enforcement_Rock-County-PD-W_9_baseband.wav
+    Mod: CQPSK_V2 | NAC: 117 | Tuner: RTL-2832/R828D 201
+    LDU:      640 →    637  (-3 ↓ (-0.5%))
+    Valid:   6014 →   5939
+    Sync Blocked:      0 →   2386
+    Signal Time:  193.6s →  193.6s | Decode: 59.5% → 59.2%
+
+  Rock County PD E
+    File: 20260124_170714_154950000_Rockingham-County_Law-Enforcement_Rock-County-PD-E_8_baseband.wav
+    Mod: CQPSK_V2 | NAC: 117 | Tuner: RTL-2832/R828D 201
+    LDU:      155 →    153  (-2 ↓ (-1.3%))
+    Valid:   1549 →   1535
+    Sync Blocked:      0 →    809
+
+  Rock County PD W
+    File: 20260124_201848_154815000_Rockingham-County_Law-Enforcement_Rock-County-PD-W_9_baseband.wav
+    Mod: CQPSK_V2 | NAC: 117 | Tuner: RTL-2832/R828D 201
+    LDU:      358 →    355  (-3 ↓ (-0.8%))
+    Valid:   2344 →   2306
+    Sync Blocked:      0 →   1413
+    Signal Time:   88.9s →   88.9s | Decode: 72.5% → 71.9%
+
+  Rock County PD E
+    File: 20260124_201855_154950000_Rockingham-County_Law-Enforcement_Rock-County-PD-E_8_baseband.wav
+    Mod: CQPSK_V2 | NAC: 117 | Tuner: RTL-2832/R828D 201
+    LDU:      182 →    182  (+0 = (+0.0%))
+    Valid:   1659 →   1635
+    Sync Blocked:      0 →    828
+    Signal Time:   39.0s →   39.0s | Decode: 84.1% → 84.1%
+
+  Rock County PD W
+    File: 20260125_073001_154815000_Rockingham-County_Law-Enforcement_Rock-County-PD-W_9_baseband.wav
+    Mod: CQPSK_V2 | NAC: 117 | Tuner: RTL-2832/R828D 201
+    LDU:     2647 →   2632  (-15 ↓ (-0.6%))
+    Valid:  16738 →  16420
+    Sync Blocked:      0 →   9701
+    Signal Time:  673.7s →  673.7s | Decode: 70.7% → 70.3%
+
+  Rock County PD E
+    File: 20260125_073006_154950000_Rockingham-County_Law-Enforcement_Rock-County-PD-E_8_baseband.wav
+    Mod: CQPSK_V2 | NAC: 117 | Tuner: RTL-2832/R828D 201
+    LDU:     2649 →   2662  (+13 ↑ (+0.5%))
+    Valid:  16977 →  16762
+    Sync Blocked:      0 →   9324
+    Signal Time:  461.7s →  461.7s | Decode: 103.3% → 103.8%
+
+  Rock County PD W
+    File: 20260202_101458_154815000_Rockingham-County_Law-Enforcement_Rock-County-PD-W_9_baseband.wav
+    Mod: CQPSK_V2 | NAC: 117 | Tuner: RTL-2832/R828D 201
+    LDU:     3232 →   3183  (-49 ↓ (-1.5%))
+    Valid:  23109 →  22569
+    Sync Blocked:      0 →  11788
+
+  Derry Fire 1 [FD]
+    File: 20260217_082300_153995000_Municipalities_Derry_Derry-Fire-1_0_baseband.wav
+    Mod: C4FM | NAC: 827 | Tuner: RTL-2832/R828D 201
+    LDU:       80 →     80  (+0 = (+0.0%))
+    Valid:    460 →    460
+    Signal Time:   20.6s →   20.6s | Decode: 69.9% → 69.9%
+
+  Derry Fire 1 [FD]
+    File: 20260217_082527_153995000_Municipalities_Derry_Derry-Fire-1_0_baseband.wav
+    Mod: C4FM | NAC: 827 | Tuner: RTL-2832/R828D 201
+    LDU:      224 →    224  (+0 = (+0.0%))
+    Valid:    852 →    852
+    Signal Time:   50.3s →   50.3s | Decode: 80.2% → 80.2%
+
+  Derry Fire 1 [FD]
+    File: 20260217_082704_153995000_Municipalities_Derry_Derry-Fire-1_0_baseband.wav
+    Mod: C4FM | NAC: 827 | Tuner: RTL-2832/R828D 201
+    LDU:      362 →    362  (+0 = (+0.0%))
+    Valid:   3299 →   3299
+    Signal Time:  116.9s →  116.9s | Decode: 55.7% → 55.7%
+
+  Derry Fire 1 [FD]
+    File: 20260217_083515_153995000_Municipalities_Derry_Derry-Fire-1_0_baseband.wav
+    Mod: C4FM | NAC: 827 | Tuner: RTL-2832/R828D 201
+    LDU:        0 →      0  (+0 =)
+    Valid:      0 →      0
+
+  Londonderry FD [FD]
+    File: 20260218_080031_156112500_Municipalities_Londonderry_Londonderry-FD_14_baseband.wav
+    Mod: CQPSK | NAC: 293 | Tuner: RTL-2832/R828D 00000001
+    LDU:      130 →    128  (-2 ↓ (-1.5%))
+    Valid:   1101 →   1095
+    Sync Blocked:      0 →    200
+
+  Derry PD 1
+    File: 20260306_074518_151010000_Municipalities_Derry_Derry-PD-1_1_baseband.wav
+    Mod: C4FM | NAC: 0 | Tuner: N/A
+    LDU:     1575 →   1575  (+0 = (+0.0%))
+    Valid: 115262 → 115262
+    Signal Time:  106.2s →  106.2s | Decode: 267.0% → 267.0%
+
+  Salem Fire [FD]
+    File: 20260306_081037_155887500_Municipalities_Salem_Salem-Fire_5_baseband.wav
+    Mod: C4FM | NAC: 0 | Tuner: N/A
+    LDU:     2256 →   2239  (-17 ↓ (-0.8%))
+    Valid:   8594 →   8579
+    Sync Blocked:      0 →     25
+    Signal Time:    0.0s →    0.0s | Decode: 1004611.8% → 997041.6%
+
+  Derry Fire 1 [FD]
+    File: 20260306_081100_153995000_Municipalities_Derry_Derry-Fire-1_0_baseband.wav
+    Mod: C4FM | NAC: 827 | Tuner: RTL-2832/R828D 201
+    LDU:      387 →    387  (+0 = (+0.0%))
+    Valid:    895 →    895
+    Signal Time:  117.8s →  117.8s | Decode: 59.1% → 59.1%
+
+
+================================================================================
+AUDIO QUALITY ANALYSIS
+================================================================================
+
+--- Rock County PD W (20260124_155626_154815000_Rockingham-County_Law-Enforcement_Rock-County-PD-W_9_baseband.wav) ---
+  Total Audio:     88.6 ↓ (-1.0%)s  (control: 89.4s)
+  Segments:        45  (control: 45)
+  Avg Seg Length:  2.0 ↓ (-1.0%)s  (control: 2.0s)
+  Distortion:      10 ↓ (-28.6%)  (control: 14)
+  Words (STT):     217 ↓ (-18.4%)  (control: 266)
+
+--- Rock County PD E (20260124_155903_154950000_Rockingham-County_Law-Enforcement_Rock-County-PD-E_8_baseband.wav) ---
+  Total Audio:     23.2s  (control: 23.2s)
+  Segments:        23  (control: 23)
+  Avg Seg Length:  1.0s  (control: 1.0s)
+  Distortion:      1  (control: 1)
+  Words (STT):     107 ↑ (+33.8%)  (control: 80)
+
+--- Rock County PD W (20260124_170708_154815000_Rockingham-County_Law-Enforcement_Rock-County-PD-W_9_baseband.wav) ---
+  Total Audio:     134.1 ↓ (-0.4%)s  (control: 134.7s)
+  Segments:        113  (control: 113)
+  Avg Seg Length:  1.2 ↓ (-0.4%)s  (control: 1.2s)
+  Distortion:      15 ↓ (-25.0%)  (control: 20)
+  Words (STT):     396 ↑ (+9.1%)  (control: 363)
+
+--- Rock County PD E (20260124_170714_154950000_Rockingham-County_Law-Enforcement_Rock-County-PD-E_8_baseband.wav) ---
+  Total Audio:     42.2 ↓ (-0.8%)s  (control: 42.6s)
+  Segments:        83  (control: 83)
+  Avg Seg Length:  0.5 ↓ (-0.8%)s  (control: 0.5s)
+  Distortion:      0  (control: 0)
+  Words (STT):     181 ↑ (+19.9%)  (control: 151)
+
+--- Rock County PD W (20260124_201848_154815000_Rockingham-County_Law-Enforcement_Rock-County-PD-W_9_baseband.wav) ---
+  Total Audio:     72.6 ↓ (-0.8%)s  (control: 73.2s)
+  Segments:        51  (control: 51)
+  Avg Seg Length:  1.4 ↓ (-0.8%)s  (control: 1.4s)
+  Distortion:      11 ↓ (-8.3%)  (control: 12)
+  Words (STT):     294 ↑ (+29.5%)  (control: 227)
+
+--- Rock County PD E (20260124_201855_154950000_Rockingham-County_Law-Enforcement_Rock-County-PD-E_8_baseband.wav) ---
+  Total Audio:     44.2 ↑ (+0.3%)s  (control: 44.1s)
+  Segments:        65 ↑ (+1.6%)  (control: 64)
+  Avg Seg Length:  0.7 ↓ (-1.2%)s  (control: 0.7s)
+  Distortion:      3 ↓ (-25.0%)  (control: 4)
+  Words (STT):     247 ↑ (+63.6%)  (control: 151)
+
+--- Rock County PD W (20260125_073001_154815000_Rockingham-County_Law-Enforcement_Rock-County-PD-W_9_baseband.wav) ---
+  Total Audio:     527.7 ↓ (-0.4%)s  (control: 530.0s)
+  Segments:        315 ↑ (+0.6%)  (control: 313)
+  Avg Seg Length:  1.7 ↓ (-1.1%)s  (control: 1.7s)
+  Distortion:      166 ↓ (-15.7%)  (control: 197)
+  Words (STT):     1457 ↓ (-0.4%)  (control: 1463)
+
+--- Rock County PD E (20260125_073006_154950000_Rockingham-County_Law-Enforcement_Rock-County-PD-E_8_baseband.wav) ---
+  Total Audio:     532.7 ↑ (+0.7%)s  (control: 529.1s)
+  Segments:        312 ↑ (+2.0%)  (control: 306)
+  Avg Seg Length:  1.7 ↓ (-1.3%)s  (control: 1.7s)
+  Distortion:      165 ↓ (-20.7%)  (control: 208)
+  Words (STT):     1551 ↓ (-5.2%)  (control: 1636)
+
+--- Rock County PD W (20260202_101458_154815000_Rockingham-County_Law-Enforcement_Rock-County-PD-W_9_baseband.wav) ---
+  Total Audio:     644.4 ↓ (-1.5%)s  (control: 654.0s)
+  Segments:        416 ↓ (-1.0%)  (control: 420)
+  Avg Seg Length:  1.5 ↓ (-0.5%)s  (control: 1.6s)
+  Distortion:      174 ↓ (-16.7%)  (control: 209)
+  Words (STT):     2050 ↑ (+13.5%)  (control: 1806)
+
+--- Derry Fire 1 (20260217_082300_153995000_Municipalities_Derry_Derry-Fire-1_0_baseband.wav) ---
+  Total Audio:     15.0s  (control: 15.0s)
+  Segments:        4  (control: 4)
+  Avg Seg Length:  3.8s  (control: 3.8s)
+  Dispatch Tones:  2 ↑ (+100.0%)  (control: 1)
+  Distortion:      0  (control: 0)
+  Words (STT):     43 ↑ (+7.5%)  (control: 40)
+
+--- Derry Fire 1 (20260217_082527_153995000_Municipalities_Derry_Derry-Fire-1_0_baseband.wav) ---
+  Total Audio:     41.2s  (control: 41.2s)
+  Segments:        5  (control: 5)
+  Avg Seg Length:  8.2s  (control: 8.2s)
+  Dispatch Tones:  1  (control: 1)
+  Distortion:      8 ↓ (-11.1%)  (control: 9)
+  Words (STT):     99 ↓ (-2.0%)  (control: 101)
+
+--- Derry Fire 1 (20260217_082704_153995000_Municipalities_Derry_Derry-Fire-1_0_baseband.wav) ---
+  Total Audio:     68.4s  (control: 68.4s)
+  Segments:        20  (control: 20)
+  Avg Seg Length:  3.4s  (control: 3.4s)
+  Dispatch Tones:  4 ↓ (-20.0%)  (control: 5)
+  Distortion:      9 ↓ (-10.0%)  (control: 10)
+  Words (STT):     127 ↓ (-11.2%)  (control: 143)
+
+--- Londonderry FD (20260218_080031_156112500_Municipalities_Londonderry_Londonderry-FD_14_baseband.wav) ---
+  Total Audio:     33.1 ↓ (-1.3%)s  (control: 33.6s)
+  Segments:        57  (control: 57)
+  Avg Seg Length:  0.6 ↓ (-1.3%)s  (control: 0.6s)
+  Dispatch Tones:  0  (control: 0)
+  Distortion:      1 ↓ (-50.0%)  (control: 2)
+  Words (STT):     195 ↑ (+33.6%)  (control: 146)
+
+--- Derry PD 1 (20260306_074518_151010000_Municipalities_Derry_Derry-PD-1_1_baseband.wav) ---
+  Total Audio:     304.7s  (control: 304.7s)
+  Segments:        129  (control: 129)
+  Avg Seg Length:  2.4s  (control: 2.4s)
+  Distortion:      71 ↑ (+6.0%)  (control: 67)
+  Words (STT):     642 ↓ (-6.0%)  (control: 683)
+
+--- Salem Fire (20260306_081037_155887500_Municipalities_Salem_Salem-Fire_5_baseband.wav) ---
+  Total Audio:     422.1 ↓ (-0.7%)s  (control: 424.9s)
+  Segments:        117 ↑ (+1.7%)  (control: 115)
+  Avg Seg Length:  3.6 ↓ (-2.4%)s  (control: 3.7s)
+  Dispatch Tones:  19  (control: 19)
+  Distortion:      19  (control: 19)
+  Words (STT):     1011 ↓ (-12.2%)  (control: 1152)
+
+--- Derry Fire 1 (20260306_081100_153995000_Municipalities_Derry_Derry-Fire-1_0_baseband.wav) ---
+  Total Audio:     71.6s  (control: 71.6s)
+  Segments:        12  (control: 12)
+  Avg Seg Length:  6.0s  (control: 6.0s)
+  Dispatch Tones:  7 ↑ (+16.7%)  (control: 6)
+  Distortion:      5  (control: 5)
+  Words (STT):     139 ↑ (+15.8%)  (control: 120)
+
+
+================================================================================
+SUMMARY
+================================================================================
+
+  Files Compared:       17
+  Total LDU Control:    15439
+  Total LDU Test:       15356
+  LDU Delta:            -83 ↓ (-0.5%)
+  Total Valid Control:  203825
+  Total Valid Test:     202512
+  Sync Blocked Ctrl:    0
+  Sync Blocked Test:    38453
+
+  By Modulation:
+    C4FM         7 files: 4884 → 4867 LDUs (-17 ↓ (-0.3%))
+    CQPSK        1 files: 130 → 128 LDUs (-2 ↓ (-1.5%))
+    CQPSK_V2     9 files: 10425 → 10361 LDUs (-64 ↓ (-0.6%))
+
+  VERDICT: CONTROL IS BETTER (test lost LDUs)

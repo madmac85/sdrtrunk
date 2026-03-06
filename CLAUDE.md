@@ -119,3 +119,10 @@ src/main/resources/                  # Images, CSS, udev rules, logback.xml
 ```
 
 The `sourceSets` in build.gradle map `src/main` and `src/test` directly (not `src/main/java`), so the Java source root is `src/main/java/`.
+
+## Active Technologies
+- Java 25+ (OpenJDK with `--enable-preview`) + JMBE 1.0.0 (IMBE codec), java-lame (MP3 encoding) (013-fix-c4fm-audio-corruption)
+- N/A (file-based test I/O only) (013-fix-c4fm-audio-corruption)
+
+## Recent Changes
+- 013-fix-c4fm-audio-corruption: Added Java 25+ (OpenJDK with `--enable-preview`) + JMBE 1.0.0 (IMBE codec), java-lame (MP3 encoding)

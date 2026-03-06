@@ -627,3 +627,35 @@ tasks.register('runDerryAudioRegression', JavaExec) {
     }
     args = argsList
 }
+
+/**
+ * Decode quality scoring: processes baseband files through playlist-matched decoders and outputs metrics JSON.
+ * Usage: ./gradlew runDecodeScore -Psamples=path/to/samples -Pplaylist=path/to/playlist.xml -Poutput=path/to/output [-Pjmbe=path/to/jmbe.jar] [-Pmode=quick|full]
+ */
+tasks.register('runDecodeScore', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.dsheirer.module.decode.p25.phase1.DecodeQualityTest'
+    if(os.isWindows()) {
+        jvmArgs = jvmArgsWindows
+    } else {
+        jvmArgs = jvmArgsLinux
+    }
+    def argsList = []
+    if(project.hasProperty('samples')) {
+        argsList.addAll(['--samples', project.property('samples')])
+    }
+    if(project.hasProperty('playlist')) {
+        argsList.addAll(['--playlist', project.property('playlist')])
+    }
+    if(project.hasProperty('output')) {
+        argsList.addAll(['--output', project.property('output')])
+    }
+    if(project.hasProperty('jmbe')) {
+        argsList.addAll(['--jmbe', project.property('jmbe')])
+    }
+    if(project.hasProperty('mode')) {
+        argsList.addAll(['--mode', project.property('mode')])
+    }
+    args = argsList
+}
