@@ -98,6 +98,10 @@ public class P25P1DecoderC4FM extends FeedbackDecoder implements IByteBufferProv
 
     public P25P1DecoderC4FM()
     {
+        // Disable sync guard for C4FM — its 4-level FSK sync detection is highly reliable,
+        // so blocked syncs are almost always genuine. Guard helps CQPSK (noisy symbol recovery)
+        // but costs C4FM 0.8% LDUs and 12%+ words on busy channels like Salem Fire.
+        mMessageFramer.mSyncGuardEnabled = false;
         mMessageProcessor.setMessageListener(getMessageListener());
         mSymbolProcessor = new P25P1DemodulatorC4FM(mMessageFramer, this);
     }
