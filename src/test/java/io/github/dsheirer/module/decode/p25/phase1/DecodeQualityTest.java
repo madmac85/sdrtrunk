@@ -37,6 +37,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import javax.xml.parsers.DocumentBuilderFactory;
 import org.w3c.dom.Document;
@@ -245,15 +246,13 @@ public class DecodeQualityTest
             }
         };
 
-        // Energy threshold for signal detection (empirical: baseband noise floor ~0.002 RMS, signal ~0.02+)
-        float SIGNAL_THRESHOLD = 0.01f;
-
         int syncBlocked = 0;
         try(TestComplexWaveSource source = new TestComplexWaveSource(file))
         {
             double sampleRate = source.getSampleRate();
             long[] totalSamples = {0};
-            long[] signalSamples = {0};
+            List<Float> bufferRmsValues = new ArrayList<>();
+            List<Integer> bufferSizes = new ArrayList<>();
 
             DecoderWrapper decoder = createDecoder(modulation, nac);
             decoder.setMessageListener(listener);
@@ -265,7 +264,6 @@ public class DecodeQualityTest
                     ComplexSamples cs = it.next();
                     decoder.receive(cs);
 
-                    // Compute RMS energy for signal detection
                     float[] iSamples = cs.i();
                     float[] qSamples = cs.q();
                     int len = Math.min(iSamples.length, qSamples.length);
@@ -277,7 +275,8 @@ public class DecodeQualityTest
                         sumSq += iSamples[s] * iSamples[s] + qSamples[s] * qSamples[s];
                     }
                     float rms = (float)Math.sqrt(sumSq / len);
-                    if(rms > SIGNAL_THRESHOLD) signalSamples[0] += len;
+                    bufferRmsValues.add(rms);
+                    bufferSizes.add(len);
                 }
             });
             decoder.setSampleRate(sampleRate);
@@ -286,11 +285,59 @@ public class DecodeQualityTest
             decoder.stop();
 
             totalFileSeconds[0] = totalSamples[0] / sampleRate;
-            signalSeconds[0] = signalSamples[0] / sampleRate;
+
+            // Adaptive signal detection: compute threshold from distribution of RMS values
+            signalSeconds[0] = computeSignalSeconds(bufferRmsValues, bufferSizes, sampleRate);
         }
         catch(Exception e) { System.err.println("  ERROR: " + e.getMessage()); }
 
         return new DecodeResult(ldu[0], valid[0], total[0], syncBlocked, bitErr[0], syncLoss[0], signalSeconds[0], totalFileSeconds[0]);
+    }
+
+    /**
+     * Computes signal-present seconds using adaptive thresholding on per-buffer RMS values.
+     * Uses percentile-based separation: estimates noise floor (10th pct) and signal level (90th pct),
+     * then places threshold at geometric mean. Falls back to max*0.3 for unimodal distributions.
+     */
+    private static double computeSignalSeconds(List<Float> rmsValues, List<Integer> sizes, double sampleRate)
+    {
+        if(rmsValues.isEmpty()) return 0;
+
+        List<Float> sorted = new ArrayList<>(rmsValues);
+        Collections.sort(sorted);
+        int n = sorted.size();
+
+        float p10 = sorted.get(n / 10);
+        float p90 = sorted.get(Math.min(9 * n / 10, n - 1));
+        float maxRms = sorted.get(n - 1);
+
+        float threshold;
+        if(maxRms < 0.0001f)
+        {
+            // Essentially no energy at all
+            return 0;
+        }
+        else if(p90 < p10 * 2.0f)
+        {
+            // Unimodal distribution — can't reliably separate signal from noise
+            // Use 30% of max as threshold (generous for all-signal files)
+            threshold = maxRms * 0.3f;
+        }
+        else
+        {
+            // Bimodal — geometric mean of noise and signal estimates
+            threshold = (float)Math.sqrt(p10 * p90);
+            // Ensure threshold is at least slightly above noise
+            threshold = Math.max(threshold, p10 * 1.5f);
+        }
+
+        long signalSamples = 0;
+        for(int i = 0; i < rmsValues.size(); i++)
+        {
+            if(rmsValues.get(i) > threshold) signalSamples += sizes.get(i);
+        }
+
+        return signalSamples / sampleRate;
     }
 
     private static AudioResult decodeAudio(File file, String modulation, int nac, TestJmbeCodecLoader codec, Path audioDir)
