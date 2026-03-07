@@ -57,6 +57,7 @@ public class P25P1MessageFramer
     private static final int RECOVERY_WINDOW_SYMBOLS = 240;       // Strategy 2: 50ms recovery window (first HDU sync)
     private static final int INITIAL_ACQUISITION_WINDOW_SYMBOLS = 960;  // Strategy 4: 200ms at 4800 symbols/sec
     private final BCH_63_16_23_P25 mBCHDecoder = new BCH_63_16_23_P25();
+    private int mMaxBchErrors = 11; // Default: full T=11 capability (no filtering)
     private static final IntField NAC_FIELD = IntField.length12(0);
     private static final IntField DUID_FIELD = IntField.length4(12);
     private final NACTracker mNACTracker = new NACTracker();
@@ -1089,6 +1090,24 @@ public class P25P1MessageFramer
     }
 
     /**
+     * Sets the maximum BCH error corrections allowed for NAC-assisted/DUID-enumerated NID recovery.
+     * Standard BCH decode always uses full T=11 capability. This threshold only applies to the
+     * fallback NAC-forced and DUID-enumerated corrections, filtering out frames where heavy NID
+     * correction indicates likely voice data corruption.
+     *
+     * @param maxErrors maximum allowed BCH corrections (1-11, default 11 = no filtering)
+     */
+    public void setMaxBchErrors(int maxErrors)
+    {
+        mMaxBchErrors = Math.max(1, Math.min(maxErrors, 11));
+    }
+
+    public int getMaxBchErrors()
+    {
+        return mMaxBchErrors;
+    }
+
+    /**
      * Sets the listener to receive framed DMR messages.
      * @param listener for messages.
      */
@@ -1141,7 +1160,7 @@ public class P25P1MessageFramer
 
 
         int trackedNAC = mNACTracker.getTrackedNAC();
-        mBCHDecoder.decode(nid, trackedNAC);
+        mBCHDecoder.decode(nid, trackedNAC, mMaxBchErrors);
 
         int nac = nid.getInt(NAC_FIELD);
         P25P1DataUnitID duid = P25P1DataUnitID.fromValue(nid.getInt(DUID_FIELD));

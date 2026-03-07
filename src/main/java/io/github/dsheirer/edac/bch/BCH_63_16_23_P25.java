@@ -60,7 +60,22 @@ public class BCH_63_16_23_P25 extends BCH_63
      */
     public void decode(CorrectedBinaryMessage message, int configuredNAC)
     {
-        // First: standard BCH decode (works for all channels)
+        decode(message, configuredNAC, T);
+    }
+
+    /**
+     * Attempts to error correct the NID message with a configurable BCH error threshold for NAC-assisted corrections.
+     * Standard BCH decode always uses the full T=11 capability. The maxBchErrors threshold only applies to
+     * NAC-forced and DUID-enumerated corrections, rejecting corrections that needed more bit corrections than
+     * the threshold allows. This filters out frames where heavy NID correction indicates likely voice data corruption.
+     *
+     * @param message to correct
+     * @param configuredNAC that can be used for NAC-assisted correction (0 = disabled).
+     * @param maxBchErrors maximum BCH corrections allowed for NAC-assisted/DUID-enumerated corrections (1-11).
+     */
+    public void decode(CorrectedBinaryMessage message, int configuredNAC, int maxBchErrors)
+    {
+        // First: standard BCH decode (works for all channels, always uses full T=11 capability)
         decode(message);
 
         if(message.getCorrectedBitCount() != BCH.MESSAGE_NOT_CORRECTED || configuredNAC <= 0)
@@ -81,7 +96,12 @@ public class BCH_63_16_23_P25 extends BCH_63
 
             if(message.getCorrectedBitCount() != BCH.MESSAGE_NOT_CORRECTED)
             {
-                return;
+                if(message.getCorrectedBitCount() <= maxBchErrors)
+                {
+                    return;
+                }
+                // Correction exceeded threshold — reject
+                message.setCorrectedBitCount(BCH.MESSAGE_NOT_CORRECTED);
             }
         }
 
@@ -103,7 +123,12 @@ public class BCH_63_16_23_P25 extends BCH_63
 
             if(message.getCorrectedBitCount() != BCH.MESSAGE_NOT_CORRECTED)
             {
-                return;
+                if(message.getCorrectedBitCount() <= maxBchErrors)
+                {
+                    return;
+                }
+                // Correction exceeded threshold — reject
+                message.setCorrectedBitCount(BCH.MESSAGE_NOT_CORRECTED);
             }
         }
 

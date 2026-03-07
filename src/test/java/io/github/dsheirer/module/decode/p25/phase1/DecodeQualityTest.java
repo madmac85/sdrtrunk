@@ -24,6 +24,7 @@ import io.github.dsheirer.audio.convert.MP3Setting;
 import io.github.dsheirer.message.IMessage;
 import io.github.dsheirer.message.SyncLossMessage;
 import io.github.dsheirer.module.decode.p25.phase1.message.P25P1Message;
+import io.github.dsheirer.module.decode.p25.phase1.message.ldu.IMBEFrameDiagnostic;
 import io.github.dsheirer.module.decode.p25.phase1.message.ldu.LDUMessage;
 import io.github.dsheirer.sample.Listener;
 import io.github.dsheirer.sample.complex.ComplexSamples;
@@ -56,7 +57,9 @@ import org.w3c.dom.NodeList;
 public class DecodeQualityTest
 {
     record ChannelConfig(String name, String system, String site, long frequency, String modulation, int nac, String preferredTuner) {}
-    record DecodeResult(int lduCount, int validMessages, int totalMessages, int syncBlockedCount, int bitErrors, int syncLosses, double signalSeconds, double totalFileSeconds) {}
+    record DecodeResult(int lduCount, int validMessages, int totalMessages, int syncBlockedCount, int bitErrors, int syncLosses, double signalSeconds, double totalFileSeconds, IMBEDiagSummary diagSummary) {}
+    record IMBEDiagSummary(int totalFrames, int totalErrors, int uncorrectableFrames, int invalidFundamentals,
+                           double avgErrorsPerFrame, int maxFrameErrors, int[] errorDistribution) {}
     record AudioResult(int segmentCount, double totalSeconds) {}
 
     /** Wraps any P25P1 decoder to provide a uniform interface. */
@@ -75,6 +78,9 @@ public class DecodeQualityTest
         String samplesDir = null, playlistPath = null, outputDir = null, jmbePath = null, mode = "quick";
         String forceMod = null;
         int forceNac = -1;
+        boolean diagEnabled = false;
+        int maxBchErrors = 11; // Default: no filtering
+        int maxImbeErrors = -1; // Default: no quality gate (-1 = disabled)
 
         for(int i = 0; i < args.length; i++)
         {
@@ -87,6 +93,9 @@ public class DecodeQualityTest
                 case "--mode" -> mode = args[++i];
                 case "--force-mod" -> forceMod = args[++i];
                 case "--force-nac" -> forceNac = Integer.parseInt(args[++i]);
+                case "--diag" -> diagEnabled = true;
+                case "--max-bch-errors" -> maxBchErrors = Integer.parseInt(args[++i]);
+                case "--max-imbe-errors" -> maxImbeErrors = Integer.parseInt(args[++i]);
             }
         }
 
@@ -136,7 +145,7 @@ public class DecodeQualityTest
             System.out.printf("%n━━━ %s ━━━%n", bbFile.getName());
             System.out.printf("  Channel: %s | Mod: %s | NAC: %d | Tuner: %s%n", channelName, modulation, nac, tuner);
 
-            DecodeResult result = runDecode(bbFile, modulation, nac);
+            DecodeResult result = runDecode(bbFile, modulation, nac, diagEnabled, maxBchErrors);
 
             int audioSegments = 0;
             double audioSeconds = 0;
@@ -144,7 +153,7 @@ public class DecodeQualityTest
             {
                 Path audioDir = outPath.resolve(sanitize(bbFile.getName()));
                 try { Files.createDirectories(audioDir); } catch(IOException e) { /* ignore */ }
-                AudioResult ar = decodeAudio(bbFile, modulation, nac, codec, audioDir);
+                AudioResult ar = decodeAudio(bbFile, modulation, nac, codec, audioDir, maxBchErrors, maxImbeErrors);
                 audioSegments = ar.segmentCount;
                 audioSeconds = ar.totalSeconds;
                 System.out.printf("  Audio: %.1fs in %d segments (avg %.1fs)%n",
@@ -158,19 +167,45 @@ public class DecodeQualityTest
             System.out.printf("  Signal: %.1fs / %.1fs file | Decode ratio: %.1f%%%n",
                 result.signalSeconds, result.totalFileSeconds, decodeRatio);
 
+            // Print IMBE diagnostic summary if available
+            IMBEDiagSummary diag = result.diagSummary;
+            if(diag != null && diag.totalFrames > 0)
+            {
+                System.out.printf("  IMBE Diag: %d frames, avg %.1f errors/frame, %d uncorrectable (%.1f%%), %d invalid fund%n",
+                    diag.totalFrames, diag.avgErrorsPerFrame, diag.uncorrectableFrames,
+                    100.0 * diag.uncorrectableFrames / diag.totalFrames, diag.invalidFundamentals);
+                System.out.printf("  Error dist [0,1,2,3,4+]: %d, %d, %d, %d, %d%n",
+                    diag.errorDistribution[0], diag.errorDistribution[1],
+                    diag.errorDistribution[2], diag.errorDistribution[3], diag.errorDistribution[4]);
+            }
+
             if(!first) json.append(",\n");
             first = false;
+
+            String diagJson = "";
+            if(diag != null)
+            {
+                diagJson = String.format(
+                    ", \"diag_total_frames\": %d, \"diag_total_errors\": %d, \"diag_uncorrectable_frames\": %d, " +
+                    "\"diag_invalid_fundamentals\": %d, \"diag_avg_errors_per_frame\": %.2f, \"diag_max_frame_errors\": %d, " +
+                    "\"diag_error_dist\": [%d, %d, %d, %d, %d]",
+                    diag.totalFrames, diag.totalErrors, diag.uncorrectableFrames,
+                    diag.invalidFundamentals, diag.avgErrorsPerFrame, diag.maxFrameErrors,
+                    diag.errorDistribution[0], diag.errorDistribution[1],
+                    diag.errorDistribution[2], diag.errorDistribution[3], diag.errorDistribution[4]);
+            }
+
             json.append(String.format(
                 "  {\"file\": \"%s\", \"channel\": \"%s\", \"system\": \"%s\", \"site\": \"%s\", " +
                 "\"modulation\": \"%s\", \"nac\": %d, \"tuner\": \"%s\", \"is_fd\": %s, " +
                 "\"ldu_count\": %d, \"valid_messages\": %d, \"total_messages\": %d, \"sync_blocked\": %d, " +
                 "\"bit_errors\": %d, \"sync_losses\": %d, \"audio_seconds\": %.2f, \"audio_segments\": %d, " +
-                "\"signal_seconds\": %.2f, \"total_file_seconds\": %.2f, \"decode_ratio\": %.2f}",
+                "\"signal_seconds\": %.2f, \"total_file_seconds\": %.2f, \"decode_ratio\": %.2f%s}",
                 escapeJson(bbFile.getName()), escapeJson(channelName), escapeJson(system), escapeJson(site),
                 modulation, nac, escapeJson(tuner), isFD,
                 result.lduCount, result.validMessages, result.totalMessages, result.syncBlockedCount,
                 result.bitErrors, result.syncLosses, audioSeconds, audioSegments,
-                result.signalSeconds, result.totalFileSeconds, decodeRatio));
+                result.signalSeconds, result.totalFileSeconds, decodeRatio, diagJson));
         }
 
         json.append("\n]\n");
@@ -184,7 +219,7 @@ public class DecodeQualityTest
         catch(IOException e) { System.err.println("ERROR writing metrics: " + e.getMessage()); }
     }
 
-    private static DecoderWrapper createDecoder(String modulation, int nac)
+    private static DecoderWrapper createDecoder(String modulation, int nac, int maxBchErrors)
     {
         return switch(modulation.toUpperCase())
         {
@@ -205,6 +240,7 @@ public class DecodeQualityTest
             {
                 P25P1DecoderLSMv2 d = new P25P1DecoderLSMv2();
                 if(nac > 0) d.setConfiguredNAC(nac);
+                if(maxBchErrors < 11) d.getMessageFramer().setMaxBchErrors(maxBchErrors);
                 yield new DecoderWrapper()
                 {
                     public void setMessageListener(Listener<IMessage> l) { d.setMessageListener(l); }
@@ -231,12 +267,18 @@ public class DecodeQualityTest
         };
     }
 
-    private static DecodeResult runDecode(File file, String modulation, int nac)
+    private static DecodeResult runDecode(File file, String modulation, int nac, boolean diagEnabled, int maxBchErrors)
     {
         int[] ldu = {0}, valid = {0}, total = {0}, bitErr = {0}, syncLoss = {0};
         double[] signalSeconds = {0}, totalFileSeconds = {0};
         Map<String, int[]> duidCounts = new HashMap<>();
         Map<String, int[]> nacCounts = new HashMap<>();
+
+        // IMBE diagnostic accumulators
+        int[] diagTotalFrames = {0}, diagTotalErrors = {0}, diagUncorrectable = {0};
+        int[] diagInvalidFund = {0}, diagMaxFrameErrors = {0};
+        // Error distribution: [0]=0 errors, [1]=1-3 errors, [2]=4-6 errors, [3]=7-10 errors, [4]=11+ errors
+        int[] diagErrorDist = new int[5];
 
         Listener<IMessage> listener = msg -> {
             if(msg instanceof SyncLossMessage) { syncLoss[0]++; return; }
@@ -251,7 +293,31 @@ public class DecodeQualityTest
                     valid[0]++;
                     duidCounts.get(duid.name())[1]++;
                     if(duid == P25P1DataUnitID.LOGICAL_LINK_DATA_UNIT_1 ||
-                       duid == P25P1DataUnitID.LOGICAL_LINK_DATA_UNIT_2) ldu[0]++;
+                       duid == P25P1DataUnitID.LOGICAL_LINK_DATA_UNIT_2)
+                    {
+                        ldu[0]++;
+
+                        // Run IMBE diagnostic on valid LDUs
+                        if(diagEnabled && msg instanceof LDUMessage lduMsg)
+                        {
+                            IMBEFrameDiagnostic.LDUErrors lduErrors = IMBEFrameDiagnostic.analyzeLDU(lduMsg);
+                            for(IMBEFrameDiagnostic.FrameErrors fe : lduErrors.frameErrors())
+                            {
+                                diagTotalFrames[0]++;
+                                diagTotalErrors[0] += fe.totalErrors();
+                                if(fe.uncorrectableCount() > 0) diagUncorrectable[0]++;
+                                if(!fe.fundamentalValid()) diagInvalidFund[0]++;
+                                if(fe.totalErrors() > diagMaxFrameErrors[0]) diagMaxFrameErrors[0] = fe.totalErrors();
+
+                                int te = fe.totalErrors();
+                                if(te == 0) diagErrorDist[0]++;
+                                else if(te <= 3) diagErrorDist[1]++;
+                                else if(te <= 6) diagErrorDist[2]++;
+                                else if(te <= 10) diagErrorDist[3]++;
+                                else diagErrorDist[4]++;
+                            }
+                        }
+                    }
                 }
                 String nacStr = String.valueOf(p.getNAC());
                 nacCounts.computeIfAbsent(nacStr, k -> new int[]{0})[0]++;
@@ -267,7 +333,7 @@ public class DecodeQualityTest
             List<Float> bufferRmsValues = new ArrayList<>();
             List<Integer> bufferSizes = new ArrayList<>();
 
-            DecoderWrapper decoder = createDecoder(modulation, nac);
+            DecoderWrapper decoder = createDecoder(modulation, nac, maxBchErrors);
             decoder.setMessageListener(listener);
             decoder.start();
             source.setListener(buf -> {
@@ -322,7 +388,14 @@ public class DecodeQualityTest
             System.out.println();
         }
 
-        return new DecodeResult(ldu[0], valid[0], total[0], syncBlocked, bitErr[0], syncLoss[0], signalSeconds[0], totalFileSeconds[0]);
+        IMBEDiagSummary diagSummary = null;
+        if(diagEnabled && diagTotalFrames[0] > 0)
+        {
+            diagSummary = new IMBEDiagSummary(diagTotalFrames[0], diagTotalErrors[0], diagUncorrectable[0],
+                diagInvalidFund[0], (double)diagTotalErrors[0] / diagTotalFrames[0], diagMaxFrameErrors[0], diagErrorDist);
+        }
+
+        return new DecodeResult(ldu[0], valid[0], total[0], syncBlocked, bitErr[0], syncLoss[0], signalSeconds[0], totalFileSeconds[0], diagSummary);
     }
 
     /**
@@ -371,10 +444,11 @@ public class DecodeQualityTest
         return signalSamples / sampleRate;
     }
 
-    private static AudioResult decodeAudio(File file, String modulation, int nac, TestJmbeCodecLoader codec, Path audioDir)
+    private static AudioResult decodeAudio(File file, String modulation, int nac, TestJmbeCodecLoader codec, Path audioDir, int maxBchErrors, int maxImbeErrors)
     {
         List<float[]> audioBuffers = new ArrayList<>();
         List<Long> lduTimestamps = new ArrayList<>();
+        int[] gatedFrames = {0};
 
         Listener<IMessage> listener = msg -> {
             if(msg instanceof LDUMessage ldu && ((P25P1Message)msg).isValid())
@@ -382,6 +456,19 @@ public class DecodeQualityTest
                 lduTimestamps.add(((P25P1Message)msg).getTimestamp());
                 for(byte[] frame : ldu.getIMBEFrames())
                 {
+                    // Candidate B: Pre-codec quality gate
+                    if(maxImbeErrors >= 0)
+                    {
+                        IMBEFrameDiagnostic.FrameErrors fe = IMBEFrameDiagnostic.analyzeFrame(frame);
+                        if(fe.totalErrors() > maxImbeErrors)
+                        {
+                            // Substitute silence (160 samples = 20ms at 8kHz)
+                            audioBuffers.add(new float[160]);
+                            gatedFrames[0]++;
+                            continue;
+                        }
+                    }
+
                     float[] audio = codec.decodeFrame(frame);
                     if(audio != null && audio.length > 0)
                     {
@@ -398,7 +485,7 @@ public class DecodeQualityTest
 
         try(TestComplexWaveSource source = new TestComplexWaveSource(file))
         {
-            DecoderWrapper decoder = createDecoder(modulation, nac);
+            DecoderWrapper decoder = createDecoder(modulation, nac, maxBchErrors);
             decoder.setMessageListener(listener);
             decoder.start();
             source.setListener(buf -> { var it = buf.iterator(); while(it.hasNext()) decoder.receive(it.next()); });

@@ -289,6 +289,9 @@ public class DecoderFactory
                     if(p1.hasConfiguredNAC())
                     {
                         lsmv2Decoder.setConfiguredNAC(p1.getConfiguredNAC());
+                        // Limit NAC-assisted BCH corrections to T=5 for simulcast channels.
+                        // Higher thresholds accept NIDs with wrong DUIDs that corrupt framer state.
+                        lsmv2Decoder.getMessageFramer().setMaxBchErrors(5);
                     }
                     modules.add(lsmv2Decoder);
                     break;
@@ -337,6 +340,14 @@ public class DecoderFactory
         {
             audioModule.setIgnoreEncryptionState(p1Config.isIgnoreEncryptionState());
             audioModule.setConcealmentStrategy(p1Config.getAudioConcealment());
+
+            // Enable pre-codec quality gate for simulcast channels (CQPSK_V2 with NAC)
+            // Filters IMBE frames with >3 FEC errors before they reach the JMBE codec,
+            // preventing codec state contamination on simulcast channels with high error rates
+            if(lsmv2Decoder != null && p1Config.hasConfiguredNAC())
+            {
+                audioModule.setMaxImbeErrors(3);
+            }
         }
         modules.add(audioModule);
 

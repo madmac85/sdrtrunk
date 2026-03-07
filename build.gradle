@@ -663,5 +663,14 @@ tasks.register('runDecodeScore', JavaExec) {
     if(project.hasProperty('forceNac')) {
         argsList.addAll(['--force-nac', project.property('forceNac')])
     }
+    if(project.hasProperty('diag')) {
+        argsList.add('--diag')
+    }
+    if(project.hasProperty('maxBchErrors')) {
+        argsList.addAll(['--max-bch-errors', project.property('maxBchErrors')])
+    }
+    if(project.hasProperty('maxImbeErrors')) {
+        argsList.addAll(['--max-imbe-errors', project.property('maxImbeErrors')])
+    }
     args = argsList
 }

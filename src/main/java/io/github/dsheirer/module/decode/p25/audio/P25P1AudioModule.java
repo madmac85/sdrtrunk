@@ -26,6 +26,7 @@ import io.github.dsheirer.dsp.gain.NonClippingGain;
 import io.github.dsheirer.message.IMessage;
 import io.github.dsheirer.module.decode.p25.phase1.DecodeConfigP25Phase1;
 import io.github.dsheirer.module.decode.p25.phase1.message.hdu.HDUMessage;
+import io.github.dsheirer.module.decode.p25.phase1.message.ldu.IMBEFrameDiagnostic;
 import io.github.dsheirer.module.decode.p25.phase1.message.ldu.LDU1Message;
 import io.github.dsheirer.module.decode.p25.phase1.message.ldu.LDU2Message;
 import io.github.dsheirer.module.decode.p25.phase1.message.ldu.LDUMessage;
@@ -56,6 +57,10 @@ public class P25P1AudioModule extends ImbeAudioModule
     private int mConcealedFrameCount = 0;
     private int mTotalFrameCount = 0;
 
+    // Pre-codec quality gate: max IMBE FEC errors before substituting silence (0 = disabled)
+    private int mMaxImbeErrors = 0;
+    private int mPreCodecFilteredCount = 0;
+
     private SquelchStateListener mSquelchStateListener = new SquelchStateListener();
     private NonClippingGain mGain = new NonClippingGain(5.0f, 0.95f);
     private List<LDUMessage> mCachedLDUMessages = new ArrayList<>();
@@ -83,6 +88,24 @@ public class P25P1AudioModule extends ImbeAudioModule
     public DecodeConfigP25Phase1.AudioConcealmentStrategy getConcealmentStrategy()
     {
         return mConcealmentStrategy;
+    }
+
+    /**
+     * Sets the maximum IMBE FEC errors allowed per frame before substituting silence.
+     * When set to a value > 0, frames exceeding this threshold are replaced with silence
+     * BEFORE being sent to the JMBE codec, preventing codec state contamination.
+     * Set to 0 to disable pre-codec filtering (default).
+     *
+     * @param maxErrors maximum total FEC errors per IMBE frame (0 = disabled, recommended: 3)
+     */
+    public void setMaxImbeErrors(int maxErrors)
+    {
+        mMaxImbeErrors = Math.max(0, maxErrors);
+    }
+
+    public int getMaxImbeErrors()
+    {
+        return mMaxImbeErrors;
     }
 
     /**
@@ -218,6 +241,21 @@ public class P25P1AudioModule extends ImbeAudioModule
             for(byte[] frame : ldu.getIMBEFrames())
             {
                 mTotalFrameCount++;
+
+                // Pre-codec quality gate: check IMBE FEC errors before codec decode
+                if(mMaxImbeErrors > 0)
+                {
+                    IMBEFrameDiagnostic.FrameErrors fe = IMBEFrameDiagnostic.analyzeFrame(frame);
+                    if(fe.totalErrors() > mMaxImbeErrors)
+                    {
+                        mPreCodecFilteredCount++;
+                        float[] silence = new float[FRAME_SAMPLE_COUNT];
+                        silence = mGain.apply(silence);
+                        addAudio(silence);
+                        continue;
+                    }
+                }
+
                 float[] audio = getAudioCodec().getAudio(frame);
 
                 // Apply concealment if enabled and frame appears corrupted
@@ -329,6 +367,7 @@ public class P25P1AudioModule extends ImbeAudioModule
         mLastGoodFrame = null;
         mLastFrameEnergy = 0.0f;
         mConcealedFrameCount = 0;
+        mPreCodecFilteredCount = 0;
         mTotalFrameCount = 0;
     }
 
