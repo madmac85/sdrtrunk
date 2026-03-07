@@ -672,5 +672,8 @@ tasks.register('runDecodeScore', JavaExec) {
     if(project.hasProperty('maxImbeErrors')) {
         argsList.addAll(['--max-imbe-errors', project.property('maxImbeErrors')])
     }
+    if(project.hasProperty('segmentGap')) {
+        argsList.addAll(['--segment-gap', project.property('segmentGap')])
+    }
     args = argsList
 }

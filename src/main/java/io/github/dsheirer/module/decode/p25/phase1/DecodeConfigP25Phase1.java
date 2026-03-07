@@ -48,24 +48,16 @@ public class DecodeConfigP25Phase1 extends DecodeConfigP25
     public static final int MAX_AUDIO_HOLDOVER_MS = 1000;
 
     /**
-     * Audio frame concealment strategy.
+     * Maximum IMBE errors before quality gate activates.
      */
-    public enum AudioConcealmentStrategy
-    {
-        /** No concealment - output decoded audio as-is (may contain artifacts) */
-        NONE,
-        /** Repeat the last good frame when corruption is detected */
-        REPEAT_LAST,
-        /** Insert silence when corruption is detected */
-        SILENCE
-    }
+    public static final int MAX_IMBE_ERRORS_MINIMUM = 0;
+    public static final int MAX_IMBE_ERRORS_MAXIMUM = 10;
 
     private Modulation mModulation = Modulation.C4FM;
     private int mConfiguredNAC = 0; // 0 = auto-detect, 1-4095 = configured NAC
     private int mAudioHoldoverMs = DEFAULT_AUDIO_HOLDOVER_MS;
     private boolean mIgnoreEncryptionState = false;
-    private boolean mIgnoreControlChannelState = false;
-    private AudioConcealmentStrategy mAudioConcealment = AudioConcealmentStrategy.REPEAT_LAST;
+    private int mMaxImbeErrors = 0; // 0 = disabled, 1-10 = quality gate threshold
 
     /**
      * Constructs an instance
@@ -190,51 +182,28 @@ public class DecodeConfigP25Phase1 extends DecodeConfigP25
     }
 
     /**
-     * Indicates if control channel detection should be ignored for this channel.
-     * When true, the decoder will never transition to CONTROL state, even if control
-     * channel messages are detected. Use this for dedicated voice channels that are
-     * known to never carry control channel traffic, to prevent false detections caused
-     * by decode errors producing garbage data that resembles control messages.
+     * Gets the maximum IMBE FEC errors allowed per frame before the quality gate activates.
+     * Frames exceeding this threshold are replaced with silence or frame repetition before
+     * being sent to the JMBE codec, preventing codec state contamination.
+     * Set to 0 to disable the quality gate (default).
      *
-     * @return true if control channel detection should be bypassed
+     * @return max IMBE errors threshold (0 = disabled, recommended: 3 for simulcast)
      */
-    @JacksonXmlProperty(isAttribute = true, localName = "ignoreControlChannelState")
-    public boolean isIgnoreControlChannelState()
+    @JacksonXmlProperty(isAttribute = true, localName = "maxImbeErrors")
+    public int getMaxImbeErrors()
     {
-        return mIgnoreControlChannelState;
+        return mMaxImbeErrors;
     }
 
     /**
-     * Sets whether control channel detection should be ignored.
+     * Sets the maximum IMBE FEC errors per frame for the pre-codec quality gate.
+     * Set to 0 to disable. Values 1-10 enable the gate at that threshold.
      *
-     * @param ignore true to bypass control channel detection
+     * @param maxErrors maximum total FEC errors per IMBE frame (0 = disabled)
      */
-    public void setIgnoreControlChannelState(boolean ignore)
+    public void setMaxImbeErrors(int maxErrors)
     {
-        mIgnoreControlChannelState = ignore;
-    }
-
-    /**
-     * Gets the audio frame concealment strategy.
-     * Concealment replaces corrupted audio frames with either silence or a repeated
-     * previous good frame to reduce audible artifacts.
-     *
-     * @return the concealment strategy
-     */
-    @JacksonXmlProperty(isAttribute = true, localName = "audioConcealment")
-    public AudioConcealmentStrategy getAudioConcealment()
-    {
-        return mAudioConcealment;
-    }
-
-    /**
-     * Sets the audio frame concealment strategy.
-     *
-     * @param strategy the concealment strategy to use
-     */
-    public void setAudioConcealment(AudioConcealmentStrategy strategy)
-    {
-        mAudioConcealment = strategy != null ? strategy : AudioConcealmentStrategy.REPEAT_LAST;
+        mMaxImbeErrors = Math.max(MAX_IMBE_ERRORS_MINIMUM, Math.min(MAX_IMBE_ERRORS_MAXIMUM, maxErrors));
     }
 
     /**

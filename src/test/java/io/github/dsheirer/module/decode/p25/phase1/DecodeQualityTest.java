@@ -81,6 +81,7 @@ public class DecodeQualityTest
         boolean diagEnabled = false;
         int maxBchErrors = 11; // Default: no filtering
         int maxImbeErrors = -1; // Default: no quality gate (-1 = disabled)
+        int segmentGapMs = 500; // Default: segment on 500ms gaps
 
         for(int i = 0; i < args.length; i++)
         {
@@ -96,6 +97,7 @@ public class DecodeQualityTest
                 case "--diag" -> diagEnabled = true;
                 case "--max-bch-errors" -> maxBchErrors = Integer.parseInt(args[++i]);
                 case "--max-imbe-errors" -> maxImbeErrors = Integer.parseInt(args[++i]);
+                case "--segment-gap" -> segmentGapMs = Integer.parseInt(args[++i]);
             }
         }
 
@@ -153,7 +155,7 @@ public class DecodeQualityTest
             {
                 Path audioDir = outPath.resolve(sanitize(bbFile.getName()));
                 try { Files.createDirectories(audioDir); } catch(IOException e) { /* ignore */ }
-                AudioResult ar = decodeAudio(bbFile, modulation, nac, codec, audioDir, maxBchErrors, maxImbeErrors);
+                AudioResult ar = decodeAudio(bbFile, modulation, nac, codec, audioDir, maxBchErrors, maxImbeErrors, segmentGapMs);
                 audioSegments = ar.segmentCount;
                 audioSeconds = ar.totalSeconds;
                 System.out.printf("  Audio: %.1fs in %d segments (avg %.1fs)%n",
@@ -444,11 +446,20 @@ public class DecodeQualityTest
         return signalSamples / sampleRate;
     }
 
-    private static AudioResult decodeAudio(File file, String modulation, int nac, TestJmbeCodecLoader codec, Path audioDir, int maxBchErrors, int maxImbeErrors)
+    private static AudioResult decodeAudio(File file, String modulation, int nac, TestJmbeCodecLoader codec, Path audioDir, int maxBchErrors, int maxImbeErrors, int segmentGapMs)
     {
         List<float[]> audioBuffers = new ArrayList<>();
         List<Long> lduTimestamps = new ArrayList<>();
         int[] gatedFrames = {0};
+        float[][] lastGoodFrame = {null};
+        int[] consecutiveGated = {0};
+        int fadeStart = 9, fadeLength = 9;
+        int codecResetThreshold = 5;
+        // Adaptive gate state
+        int adaptiveWindow = 27;
+        int[] adaptiveIdx = {0};
+        int[] adaptivePass = {0};
+        boolean[] adaptiveDisabled = {false};
 
         Listener<IMessage> listener = msg -> {
             if(msg instanceof LDUMessage ldu && ((P25P1Message)msg).isValid())
@@ -456,19 +467,58 @@ public class DecodeQualityTest
                 lduTimestamps.add(((P25P1Message)msg).getTimestamp());
                 for(byte[] frame : ldu.getIMBEFrames())
                 {
-                    // Candidate B: Pre-codec quality gate
+                    // Pre-codec quality gate with adaptive disable
                     if(maxImbeErrors >= 0)
                     {
                         IMBEFrameDiagnostic.FrameErrors fe = IMBEFrameDiagnostic.analyzeFrame(frame);
-                        if(fe.totalErrors() > maxImbeErrors)
+                        boolean exceedsThreshold = fe.totalErrors() > maxImbeErrors;
+
+                        // Update adaptive gate
+                        adaptiveIdx[0]++;
+                        if(!exceedsThreshold) adaptivePass[0]++;
+                        if(adaptiveIdx[0] >= adaptiveWindow)
                         {
-                            // Substitute silence (160 samples = 20ms at 8kHz)
-                            audioBuffers.add(new float[160]);
+                            float passRate = (float)adaptivePass[0] / adaptiveIdx[0];
+                            if(adaptiveDisabled[0] && passRate >= 0.50f) adaptiveDisabled[0] = false;
+                            else if(!adaptiveDisabled[0] && passRate < 0.30f) adaptiveDisabled[0] = true;
+                            adaptiveIdx[0] = 0;
+                            adaptivePass[0] = 0;
+                        }
+
+                        if(exceedsThreshold && !adaptiveDisabled[0])
+                        {
                             gatedFrames[0]++;
+                            consecutiveGated[0]++;
+
+                            // Reset codec after sustained corruption
+                            if(consecutiveGated[0] == codecResetThreshold)
+                            {
+                                codec.reset();
+                            }
+
+                            // Repeat last good frame with fade-out
+                            if(lastGoodFrame[0] != null && consecutiveGated[0] <= fadeStart + fadeLength)
+                            {
+                                float[] repeated = lastGoodFrame[0].clone();
+                                if(consecutiveGated[0] > fadeStart)
+                                {
+                                    float fade = 1.0f - (float)(consecutiveGated[0] - fadeStart) / fadeLength;
+                                    for(int s = 0; s < repeated.length; s++)
+                                    {
+                                        repeated[s] *= fade;
+                                    }
+                                }
+                                audioBuffers.add(repeated);
+                            }
+                            else
+                            {
+                                audioBuffers.add(new float[160]);
+                            }
                             continue;
                         }
                     }
 
+                    consecutiveGated[0] = 0;
                     float[] audio = codec.decodeFrame(frame);
                     if(audio != null && audio.length > 0)
                     {
@@ -477,6 +527,7 @@ public class DecodeQualityTest
                             float a = audio[s] * 5.0f;
                             audio[s] = Math.max(-0.95f, Math.min(0.95f, a));
                         }
+                        lastGoodFrame[0] = audio.clone();
                         audioBuffers.add(audio);
                     }
                 }
@@ -497,7 +548,7 @@ public class DecodeQualityTest
 
         if(audioBuffers.isEmpty()) return new AudioResult(0, 0);
 
-        // Segment by LDU gaps >500ms
+        // Segment by LDU gaps exceeding the configured threshold
         List<List<float[]>> segments = new ArrayList<>();
         List<float[]> current = new ArrayList<>();
         int framesPerLdu = 9;
@@ -505,7 +556,7 @@ public class DecodeQualityTest
 
         for(int i = 0; i < lduTimestamps.size(); i++)
         {
-            if(i > 0 && (lduTimestamps.get(i) - lduTimestamps.get(i - 1)) > 500)
+            if(i > 0 && (lduTimestamps.get(i) - lduTimestamps.get(i - 1)) > segmentGapMs)
             {
                 if(!current.isEmpty()) { segments.add(current); current = new ArrayList<>(); }
             }

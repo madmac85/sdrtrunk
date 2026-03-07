@@ -40,10 +40,8 @@ import java.util.ArrayList;
 import java.util.List;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
-import javafx.collections.FXCollections;
 import javafx.geometry.HPos;
 import javafx.geometry.Insets;
-import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.Spinner;
 import javafx.scene.control.SpinnerValueFactory;
@@ -80,13 +78,11 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
     private ToggleButton mLSMToggleButton;
     private ToggleButton mLSMv2ToggleButton;
 
-    // Voice-only channel configuration (LSM v2 only)
+    // LSM v2 channel options
     private ToggleSwitch mIgnoreEncryptionSwitch;
     private Label mIgnoreEncryptionLabel;
-    private ToggleSwitch mIgnoreControlChannelSwitch;
-    private Label mIgnoreControlChannelLabel;
-    private ComboBox<DecodeConfigP25Phase1.AudioConcealmentStrategy> mConcealmentComboBox;
-    private Label mConcealmentLabel;
+    private Spinner<Integer> mMaxImbeErrorsSpinner;
+    private Label mMaxImbeErrorsLabel;
 
     /**
      * Constructs an instance
@@ -171,9 +167,9 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
             GridPane.setConstraints(modulationHelpLabel, 0, 2, 6, 1);
             gridPane.getChildren().add(modulationHelpLabel);
 
-            // Voice-only channel options (row 3) - only visible for LSM v2
-            mIgnoreEncryptionLabel = new Label("Voice-Only Mode:");
-            mIgnoreEncryptionLabel.setTooltip(new Tooltip("Enable for dedicated voice channels with no encryption or control traffic"));
+            // LSM v2 options (row 3) - only visible for LSM v2
+            mIgnoreEncryptionLabel = new Label("Skip Encryption Check:");
+            mIgnoreEncryptionLabel.setTooltip(new Tooltip("Start audio immediately without waiting for encryption status (for known unencrypted channels)"));
             GridPane.setHalignment(mIgnoreEncryptionLabel, HPos.RIGHT);
             GridPane.setConstraints(mIgnoreEncryptionLabel, 0, 3);
             gridPane.getChildren().add(mIgnoreEncryptionLabel);
@@ -181,28 +177,14 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
             GridPane.setConstraints(getIgnoreEncryptionSwitch(), 1, 3);
             gridPane.getChildren().add(getIgnoreEncryptionSwitch());
 
-            Label ignoreEncLabel = new Label("Skip Encryption Check");
-            ignoreEncLabel.setTooltip(new Tooltip("Start audio immediately without waiting for encryption status (for known unencrypted channels)"));
-            GridPane.setConstraints(ignoreEncLabel, 2, 3);
-            gridPane.getChildren().add(ignoreEncLabel);
+            mMaxImbeErrorsLabel = new Label("Max IMBE Errors (0=off):");
+            mMaxImbeErrorsLabel.setTooltip(new Tooltip("Pre-codec quality gate: frames exceeding this IMBE FEC error threshold are silenced.\n0 = disabled (default). Try 3 for simulcast channels with bimodal error patterns."));
+            GridPane.setHalignment(mMaxImbeErrorsLabel, HPos.RIGHT);
+            GridPane.setConstraints(mMaxImbeErrorsLabel, 2, 3, 2, 1);
+            gridPane.getChildren().add(mMaxImbeErrorsLabel);
 
-            GridPane.setConstraints(getIgnoreControlChannelSwitch(), 3, 3);
-            gridPane.getChildren().add(getIgnoreControlChannelSwitch());
-
-            mIgnoreControlChannelLabel = new Label("Skip Control Detection");
-            mIgnoreControlChannelLabel.setTooltip(new Tooltip("Prevent false control channel state from decode errors (for known voice-only channels)"));
-            GridPane.setConstraints(mIgnoreControlChannelLabel, 4, 3, 2, 1);
-            gridPane.getChildren().add(mIgnoreControlChannelLabel);
-
-            // Audio concealment (row 4) - only visible for LSM v2
-            mConcealmentLabel = new Label("Audio Concealment:");
-            mConcealmentLabel.setTooltip(new Tooltip("Strategy for handling corrupted audio frames"));
-            GridPane.setHalignment(mConcealmentLabel, HPos.RIGHT);
-            GridPane.setConstraints(mConcealmentLabel, 0, 4);
-            gridPane.getChildren().add(mConcealmentLabel);
-
-            GridPane.setConstraints(getConcealmentComboBox(), 1, 4, 2, 1);
-            gridPane.getChildren().add(getConcealmentComboBox());
+            GridPane.setConstraints(getMaxImbeErrorsSpinner(), 4, 3);
+            gridPane.getChildren().add(getMaxImbeErrorsSpinner());
 
             // Update visibility based on modulation selection
             updateLSMv2OptionsVisibility();
@@ -410,7 +392,7 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
         getNACSpinner().setVisible(showV2Options);
         getNACSpinner().setManaged(showV2Options);
 
-        // Ignore encryption switch
+        // Skip encryption switch
         if(mIgnoreEncryptionLabel != null)
         {
             mIgnoreEncryptionLabel.setVisible(showV2Options);
@@ -419,32 +401,14 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
         getIgnoreEncryptionSwitch().setVisible(showV2Options);
         getIgnoreEncryptionSwitch().setManaged(showV2Options);
 
-        // Ignore control channel switch
-        if(mIgnoreControlChannelLabel != null)
+        // Max IMBE errors spinner
+        if(mMaxImbeErrorsLabel != null)
         {
-            mIgnoreControlChannelLabel.setVisible(showV2Options);
-            mIgnoreControlChannelLabel.setManaged(showV2Options);
+            mMaxImbeErrorsLabel.setVisible(showV2Options);
+            mMaxImbeErrorsLabel.setManaged(showV2Options);
         }
-        getIgnoreControlChannelSwitch().setVisible(showV2Options);
-        getIgnoreControlChannelSwitch().setManaged(showV2Options);
-
-        // Audio concealment combo
-        if(mConcealmentLabel != null)
-        {
-            mConcealmentLabel.setVisible(showV2Options);
-            mConcealmentLabel.setManaged(showV2Options);
-        }
-        getConcealmentComboBox().setVisible(showV2Options);
-        getConcealmentComboBox().setManaged(showV2Options);
-    }
-
-    /**
-     * @deprecated Use updateLSMv2OptionsVisibility() instead
-     */
-    @Deprecated
-    private void updateNACVisibility()
-    {
-        updateLSMv2OptionsVisibility();
+        getMaxImbeErrorsSpinner().setVisible(showV2Options);
+        getMaxImbeErrorsSpinner().setManaged(showV2Options);
     }
 
     private ToggleSwitch getIgnoreEncryptionSwitch()
@@ -459,33 +423,26 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
         return mIgnoreEncryptionSwitch;
     }
 
-    private ToggleSwitch getIgnoreControlChannelSwitch()
+    private Spinner<Integer> getMaxImbeErrorsSpinner()
     {
-        if(mIgnoreControlChannelSwitch == null)
+        if(mMaxImbeErrorsSpinner == null)
         {
-            mIgnoreControlChannelSwitch = new ToggleSwitch();
-            mIgnoreControlChannelSwitch.setDisable(true);
-            mIgnoreControlChannelSwitch.selectedProperty()
+            mMaxImbeErrorsSpinner = new Spinner<>();
+            mMaxImbeErrorsSpinner.setDisable(true);
+            mMaxImbeErrorsSpinner.setTooltip(new Tooltip(
+                "Pre-codec quality gate threshold.\n" +
+                "0 = disabled (default)\n" +
+                "3 = recommended for some simulcast channels\n" +
+                "Frames with more IMBE FEC errors than this are silenced."));
+            mMaxImbeErrorsSpinner.getStyleClass().add(Spinner.STYLE_CLASS_SPLIT_ARROWS_HORIZONTAL);
+            mMaxImbeErrorsSpinner.setPrefWidth(80);
+            SpinnerValueFactory<Integer> svf = new SpinnerValueFactory.IntegerSpinnerValueFactory(
+                DecodeConfigP25Phase1.MAX_IMBE_ERRORS_MINIMUM, DecodeConfigP25Phase1.MAX_IMBE_ERRORS_MAXIMUM, 0);
+            mMaxImbeErrorsSpinner.setValueFactory(svf);
+            mMaxImbeErrorsSpinner.getValueFactory().valueProperty()
                 .addListener((observable, oldValue, newValue) -> modifiedProperty().set(true));
         }
-        return mIgnoreControlChannelSwitch;
-    }
-
-    private ComboBox<DecodeConfigP25Phase1.AudioConcealmentStrategy> getConcealmentComboBox()
-    {
-        if(mConcealmentComboBox == null)
-        {
-            mConcealmentComboBox = new ComboBox<>(FXCollections.observableArrayList(
-                DecodeConfigP25Phase1.AudioConcealmentStrategy.values()));
-            mConcealmentComboBox.setDisable(true);
-            mConcealmentComboBox.setTooltip(new Tooltip(
-                "NONE: No concealment (may have artifacts)\n" +
-                "REPEAT_LAST: Repeat previous good frame (recommended)\n" +
-                "SILENCE: Insert silence for corrupted frames"));
-            mConcealmentComboBox.valueProperty()
-                .addListener((observable, oldValue, newValue) -> modifiedProperty().set(true));
-        }
-        return mConcealmentComboBox;
+        return mMaxImbeErrorsSpinner;
     }
 
     private RecordConfigurationEditor getRecordConfigurationEditor()
@@ -516,8 +473,7 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
         getTrafficChannelPoolSizeSpinner().setDisable(!enabled);
         getNACSpinner().setDisable(!enabled);
         getIgnoreEncryptionSwitch().setDisable(!enabled);
-        getIgnoreControlChannelSwitch().setDisable(!enabled);
-        getConcealmentComboBox().setDisable(!enabled);
+        getMaxImbeErrorsSpinner().setDisable(!enabled);
 
         if(config instanceof DecodeConfigP25Phase1 decodeConfig)
         {
@@ -525,10 +481,9 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
             getTrafficChannelPoolSizeSpinner().getValueFactory().setValue(decodeConfig.getTrafficChannelPoolSize());
             getNACSpinner().getValueFactory().setValue(decodeConfig.getConfiguredNAC());
 
-            // Voice-only channel options
+            // LSM v2 options
             getIgnoreEncryptionSwitch().setSelected(decodeConfig.isIgnoreEncryptionState());
-            getIgnoreControlChannelSwitch().setSelected(decodeConfig.isIgnoreControlChannelState());
-            getConcealmentComboBox().setValue(decodeConfig.getAudioConcealment());
+            getMaxImbeErrorsSpinner().getValueFactory().setValue(decodeConfig.getMaxImbeErrors());
 
             getC4FMToggleButton().setSelected(false);
             getLSMToggleButton().setSelected(false);
@@ -553,8 +508,7 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
             getTrafficChannelPoolSizeSpinner().getValueFactory().setValue(0);
             getNACSpinner().getValueFactory().setValue(0);
             getIgnoreEncryptionSwitch().setSelected(false);
-            getIgnoreControlChannelSwitch().setSelected(false);
-            getConcealmentComboBox().setValue(DecodeConfigP25Phase1.AudioConcealmentStrategy.REPEAT_LAST);
+            getMaxImbeErrorsSpinner().getValueFactory().setValue(0);
         }
     }
 
@@ -576,12 +530,9 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
         config.setTrafficChannelPoolSize(getTrafficChannelPoolSizeSpinner().getValue());
         config.setConfiguredNAC(getNACSpinner().getValue());
 
-        // Voice-only channel options
+        // LSM v2 options
         config.setIgnoreEncryptionState(getIgnoreEncryptionSwitch().isSelected());
-        config.setIgnoreControlChannelState(getIgnoreControlChannelSwitch().isSelected());
-        DecodeConfigP25Phase1.AudioConcealmentStrategy concealment = getConcealmentComboBox().getValue();
-        config.setAudioConcealment(concealment != null ? concealment :
-            DecodeConfigP25Phase1.AudioConcealmentStrategy.REPEAT_LAST);
+        config.setMaxImbeErrors(getMaxImbeErrorsSpinner().getValue() != null ? getMaxImbeErrorsSpinner().getValue() : 0);
 
         if(getC4FMToggleButton().isSelected())
         {

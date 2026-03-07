@@ -24,7 +24,6 @@ import io.github.dsheirer.audio.squelch.SquelchState;
 import io.github.dsheirer.audio.squelch.SquelchStateEvent;
 import io.github.dsheirer.dsp.gain.NonClippingGain;
 import io.github.dsheirer.message.IMessage;
-import io.github.dsheirer.module.decode.p25.phase1.DecodeConfigP25Phase1;
 import io.github.dsheirer.module.decode.p25.phase1.message.hdu.HDUMessage;
 import io.github.dsheirer.module.decode.p25.phase1.message.ldu.IMBEFrameDiagnostic;
 import io.github.dsheirer.module.decode.p25.phase1.message.ldu.LDU1Message;
@@ -37,29 +36,31 @@ import java.util.List;
 
 public class P25P1AudioModule extends ImbeAudioModule
 {
-    // Import the concealment strategy enum from config
-    private static final DecodeConfigP25Phase1.AudioConcealmentStrategy DEFAULT_CONCEALMENT =
-        DecodeConfigP25Phase1.AudioConcealmentStrategy.REPEAT_LAST;
-
-    // Audio frame validation thresholds
-    private static final float ENERGY_SPIKE_THRESHOLD = 8.0f;   // Max energy ratio between consecutive frames
-    private static final float ENERGY_DROP_THRESHOLD = 0.05f;   // Min energy ratio (detect sudden drops)
     private static final int FRAME_SAMPLE_COUNT = 160;          // 20ms at 8kHz
 
     private boolean mEncryptedCall = false;
     private boolean mEncryptedCallStateEstablished = false;
     private boolean mIgnoreEncryptionState = false;
-    private DecodeConfigP25Phase1.AudioConcealmentStrategy mConcealmentStrategy = DEFAULT_CONCEALMENT;
 
-    // Frame validation state
+    // Quality gate state
     private float[] mLastGoodFrame = null;
-    private float mLastFrameEnergy = 0.0f;
-    private int mConcealedFrameCount = 0;
     private int mTotalFrameCount = 0;
 
     // Pre-codec quality gate: max IMBE FEC errors before substituting silence (0 = disabled)
     private int mMaxImbeErrors = 0;
     private int mPreCodecFilteredCount = 0;
+    private int mConsecutiveGatedFrames = 0;
+    private static final int GATE_FADE_START = 9;   // Start fading after 9 consecutive gated frames (1 LDU)
+    private static final int GATE_FADE_LENGTH = 9;   // Fade to silence over next 9 frames
+    private static final int CODEC_RESET_THRESHOLD = 5; // Reset codec after this many consecutive gated frames
+
+    // Adaptive gate: auto-disable when pass rate is too low (non-bimodal error distribution)
+    private static final int ADAPTIVE_WINDOW = 27;       // 3 LDUs worth of frames
+    private static final float ADAPTIVE_DISABLE_RATE = 0.30f;  // Disable gate when <30% of frames pass
+    private static final float ADAPTIVE_ENABLE_RATE = 0.50f;   // Re-enable gate when >50% pass
+    private int mAdaptiveWindowIndex = 0;
+    private int mAdaptivePassCount = 0;
+    private boolean mAdaptiveGateDisabled = false;
 
     private SquelchStateListener mSquelchStateListener = new SquelchStateListener();
     private NonClippingGain mGain = new NonClippingGain(5.0f, 0.95f);
@@ -68,26 +69,6 @@ public class P25P1AudioModule extends ImbeAudioModule
     public P25P1AudioModule(UserPreferences userPreferences, AliasList aliasList)
     {
         super(userPreferences, aliasList);
-    }
-
-    /**
-     * Sets the audio frame concealment strategy.
-     *
-     * @param strategy the concealment strategy to use
-     */
-    public void setConcealmentStrategy(DecodeConfigP25Phase1.AudioConcealmentStrategy strategy)
-    {
-        mConcealmentStrategy = strategy != null ? strategy : DEFAULT_CONCEALMENT;
-    }
-
-    /**
-     * Gets the current concealment strategy.
-     *
-     * @return the current strategy
-     */
-    public DecodeConfigP25Phase1.AudioConcealmentStrategy getConcealmentStrategy()
-    {
-        return mConcealmentStrategy;
     }
 
     /**
@@ -106,16 +87,6 @@ public class P25P1AudioModule extends ImbeAudioModule
     public int getMaxImbeErrors()
     {
         return mMaxImbeErrors;
-    }
-
-    /**
-     * Gets the number of frames that were concealed since the last call start.
-     *
-     * @return concealed frame count
-     */
-    public int getConcealedFrameCount()
-    {
-        return mConcealedFrameCount;
     }
 
     /**
@@ -246,31 +217,49 @@ public class P25P1AudioModule extends ImbeAudioModule
                 if(mMaxImbeErrors > 0)
                 {
                     IMBEFrameDiagnostic.FrameErrors fe = IMBEFrameDiagnostic.analyzeFrame(frame);
-                    if(fe.totalErrors() > mMaxImbeErrors)
+                    boolean exceedsThreshold = fe.totalErrors() > mMaxImbeErrors;
+
+                    // Adaptive gate: track pass rate and auto-disable when most frames fail
+                    updateAdaptiveGate(exceedsThreshold);
+
+                    if(exceedsThreshold && !mAdaptiveGateDisabled)
                     {
                         mPreCodecFilteredCount++;
-                        float[] silence = new float[FRAME_SAMPLE_COUNT];
-                        silence = mGain.apply(silence);
-                        addAudio(silence);
+                        mConsecutiveGatedFrames++;
+
+                        // Reset codec after sustained corruption to prevent state contamination
+                        if(mConsecutiveGatedFrames == CODEC_RESET_THRESHOLD)
+                        {
+                            getAudioCodec().reset();
+                        }
+
+                        // Repeat last good frame with fade-out, or silence if none available
+                        if(mLastGoodFrame != null && mConsecutiveGatedFrames <= GATE_FADE_START + GATE_FADE_LENGTH)
+                        {
+                            float[] repeated = mLastGoodFrame.clone();
+                            if(mConsecutiveGatedFrames > GATE_FADE_START)
+                            {
+                                float fade = 1.0f - (float)(mConsecutiveGatedFrames - GATE_FADE_START) / GATE_FADE_LENGTH;
+                                for(int i = 0; i < repeated.length; i++)
+                                {
+                                    repeated[i] *= fade;
+                                }
+                            }
+                            addAudio(mGain.apply(repeated));
+                        }
+                        else
+                        {
+                            addAudio(mGain.apply(new float[FRAME_SAMPLE_COUNT]));
+                        }
                         continue;
                     }
                 }
 
+                // Good frame passed the gate (or gate adaptively disabled) — reset consecutive counter
+                mConsecutiveGatedFrames = 0;
+
                 float[] audio = getAudioCodec().getAudio(frame);
-
-                // Apply concealment if enabled and frame appears corrupted
-                if(mConcealmentStrategy != DecodeConfigP25Phase1.AudioConcealmentStrategy.NONE && isFrameSuspicious(audio))
-                {
-                    mConcealedFrameCount++;
-                    audio = getConcealmentAudio();
-                }
-                else
-                {
-                    // Track this as a good frame for future concealment
-                    mLastGoodFrame = audio.clone();
-                    mLastFrameEnergy = calculateFrameEnergy(audio);
-                }
-
+                mLastGoodFrame = audio.clone();
                 audio = mGain.apply(audio);
                 addAudio(audio);
             }
@@ -282,81 +271,43 @@ public class P25P1AudioModule extends ImbeAudioModule
     }
 
     /**
-     * Calculates the RMS energy of an audio frame.
-     *
-     * @param audio the audio samples
-     * @return RMS energy value
+     * Updates the adaptive gate state based on whether the current frame exceeds the threshold.
+     * When most frames fail the gate (non-bimodal error distribution), the gate auto-disables
+     * to let the codec attempt partial decode instead of producing silence/repetition.
      */
-    private float calculateFrameEnergy(float[] audio)
+    private void updateAdaptiveGate(boolean exceedsThreshold)
     {
-        if(audio == null || audio.length == 0)
+        mAdaptiveWindowIndex++;
+        if(!exceedsThreshold)
         {
-            return 0.0f;
+            mAdaptivePassCount++;
         }
 
-        float sum = 0.0f;
-        for(float sample : audio)
+        if(mAdaptiveWindowIndex >= ADAPTIVE_WINDOW)
         {
-            sum += sample * sample;
-        }
-        return (float)Math.sqrt(sum / audio.length);
-    }
+            float passRate = (float)mAdaptivePassCount / mAdaptiveWindowIndex;
 
-    /**
-     * Determines if an audio frame appears suspicious based on energy analysis.
-     * A frame is suspicious if:
-     * - Energy spikes dramatically compared to the previous frame
-     * - Energy drops to near-zero suddenly (not a natural fade)
-     *
-     * @param audio the decoded audio samples
-     * @return true if the frame appears corrupted
-     */
-    private boolean isFrameSuspicious(float[] audio)
-    {
-        if(mLastGoodFrame == null)
-        {
-            // First frame - can't compare, assume good
-            return false;
-        }
-
-        float currentEnergy = calculateFrameEnergy(audio);
-
-        // Check for energy spike (corruption often causes loud noise)
-        if(mLastFrameEnergy > 0.001f)  // Only check if previous frame had measurable energy
-        {
-            float energyRatio = currentEnergy / mLastFrameEnergy;
-
-            if(energyRatio > ENERGY_SPIKE_THRESHOLD)
+            if(mAdaptiveGateDisabled)
             {
-                // Sudden energy spike - likely corruption
-                return true;
+                // Re-enable if conditions improved
+                if(passRate >= ADAPTIVE_ENABLE_RATE)
+                {
+                    mAdaptiveGateDisabled = false;
+                }
+            }
+            else
+            {
+                // Disable if too few frames pass
+                if(passRate < ADAPTIVE_DISABLE_RATE)
+                {
+                    mAdaptiveGateDisabled = true;
+                }
             }
 
-            // Check for sudden energy drop (different from natural fade)
-            // Natural fades are gradual, corruption is sudden
-            if(energyRatio < ENERGY_DROP_THRESHOLD && currentEnergy < 0.01f)
-            {
-                // Sudden drop to near-silence while previous frame had content
-                return true;
-            }
+            // Reset window
+            mAdaptiveWindowIndex = 0;
+            mAdaptivePassCount = 0;
         }
-
-        return false;
-    }
-
-    /**
-     * Gets concealment audio based on the current strategy.
-     *
-     * @return audio samples for concealment
-     */
-    private float[] getConcealmentAudio()
-    {
-        if(mConcealmentStrategy == DecodeConfigP25Phase1.AudioConcealmentStrategy.REPEAT_LAST && mLastGoodFrame != null)
-        {
-            return mLastGoodFrame.clone();
-        }
-        // Fall through to silence for SILENCE strategy or if no good frame available
-        return new float[FRAME_SAMPLE_COUNT];
     }
 
     /**
@@ -365,10 +316,12 @@ public class P25P1AudioModule extends ImbeAudioModule
     private void resetFrameValidation()
     {
         mLastGoodFrame = null;
-        mLastFrameEnergy = 0.0f;
-        mConcealedFrameCount = 0;
         mPreCodecFilteredCount = 0;
+        mConsecutiveGatedFrames = 0;
         mTotalFrameCount = 0;
+        mAdaptiveWindowIndex = 0;
+        mAdaptivePassCount = 0;
+        mAdaptiveGateDisabled = false;
     }
 
     /**

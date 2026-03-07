@@ -328,26 +328,14 @@ public class DecoderFactory
                 decoderState.setSignalEnergyProvider(lsmv2Decoder);
                 decoderState.setHoldoverMs(p1Config.getAudioHoldoverMs());
             }
-            if(decoderState != null)
-            {
-                decoderState.setIgnoreControlChannelState(p1Config.isIgnoreControlChannelState());
-            }
         }
 
-        // Create audio module and configure voice-only channel options
+        // Create audio module and configure channel options
         P25P1AudioModule audioModule = new P25P1AudioModule(userPreferences, aliasList);
         if(channel.getDecodeConfiguration() instanceof DecodeConfigP25Phase1 p1Config)
         {
             audioModule.setIgnoreEncryptionState(p1Config.isIgnoreEncryptionState());
-            audioModule.setConcealmentStrategy(p1Config.getAudioConcealment());
-
-            // Enable pre-codec quality gate for simulcast channels (CQPSK_V2 with NAC)
-            // Filters IMBE frames with >3 FEC errors before they reach the JMBE codec,
-            // preventing codec state contamination on simulcast channels with high error rates
-            if(lsmv2Decoder != null && p1Config.hasConfiguredNAC())
-            {
-                audioModule.setMaxImbeErrors(3);
-            }
+            audioModule.setMaxImbeErrors(p1Config.getMaxImbeErrors());
         }
         modules.add(audioModule);
 
