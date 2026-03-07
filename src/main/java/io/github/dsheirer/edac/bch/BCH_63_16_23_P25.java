@@ -46,24 +46,70 @@ public class BCH_63_16_23_P25 extends BCH_63
         super.decode(message);
     }
 
+    // Valid P25 Phase 1 DUID values that appear in the NID
+    private static final int[] VALID_DUIDS = {0, 3, 5, 7, 10, 12, 15};
+
     /**
-     * Attempts to error correct the NID message.  If the message is uncorrectable, overwrite the message NAC field with
-     * the most frequently/recently observed NAC value and attempt to correct the message a second time.
+     * Attempts to error correct the NID message.  If the message is uncorrectable and a configured NAC is provided,
+     * performs NAC-assisted correction by forcing the known NAC value and enumerating all valid DUID values.
+     * This effectively reduces the error correction problem from 16 unknown information bits to just 47 parity bits
+     * with known information, significantly improving recovery on simulcast channels where NID corruption is common.
+     *
      * @param message to correct
-     * @param observedNAC that can be used to attempt a second correction on an uncorrectable message.
+     * @param configuredNAC that can be used for NAC-assisted correction (0 = disabled).
      */
-    public void decode(CorrectedBinaryMessage message, int observedNAC)
+    public void decode(CorrectedBinaryMessage message, int configuredNAC)
     {
+        // First: standard BCH decode (works for all channels)
         decode(message);
 
-        if(message.getCorrectedBitCount() == BCH.MESSAGE_NOT_CORRECTED && observedNAC > 0)
+        if(message.getCorrectedBitCount() != BCH.MESSAGE_NOT_CORRECTED || configuredNAC <= 0)
         {
-            //Check to see if the message NAC is different than the observed NAC ... overwrite and try again.
-            if(message.getInt(NAC_FIELD) != observedNAC)
+            return;
+        }
+
+        // Standard BCH failed. Try NAC-assisted correction.
+        // Save original NAC and DUID bits (BCH decode does not modify bits on failure)
+        int originalNAC = message.getInt(NAC_FIELD);
+        int originalDUID = message.getInt(DUID_FIELD);
+
+        // First try: force configured NAC, keep original DUID (most likely to succeed)
+        if(originalNAC != configuredNAC)
+        {
+            message.setInt(configuredNAC, NAC_FIELD);
+            decode(message);
+
+            if(message.getCorrectedBitCount() != BCH.MESSAGE_NOT_CORRECTED)
             {
-                message.setInt(observedNAC, NAC_FIELD);
-                decode(message);
+                return;
             }
         }
+
+        // Second try: enumerate all valid DUIDs with forced NAC
+        for(int duid : VALID_DUIDS)
+        {
+            if(duid == originalDUID && originalNAC == configuredNAC)
+            {
+                continue; // Already tried this combination in standard decode
+            }
+            if(duid == originalDUID)
+            {
+                continue; // Already tried this DUID with forced NAC above
+            }
+
+            message.setInt(configuredNAC, NAC_FIELD);
+            message.setInt(duid, DUID_FIELD);
+            decode(message);
+
+            if(message.getCorrectedBitCount() != BCH.MESSAGE_NOT_CORRECTED)
+            {
+                return;
+            }
+        }
+
+        // All attempts failed. Restore original information bits.
+        message.setInt(originalNAC, NAC_FIELD);
+        message.setInt(originalDUID, DUID_FIELD);
+        message.setCorrectedBitCount(BCH.MESSAGE_NOT_CORRECTED);
     }
 }
