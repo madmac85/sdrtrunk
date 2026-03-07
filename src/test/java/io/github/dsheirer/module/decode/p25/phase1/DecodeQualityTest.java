@@ -38,7 +38,9 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import javax.xml.parsers.DocumentBuilderFactory;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -71,6 +73,8 @@ public class DecodeQualityTest
     public static void main(String[] args)
     {
         String samplesDir = null, playlistPath = null, outputDir = null, jmbePath = null, mode = "quick";
+        String forceMod = null;
+        int forceNac = -1;
 
         for(int i = 0; i < args.length; i++)
         {
@@ -81,6 +85,8 @@ public class DecodeQualityTest
                 case "--output" -> outputDir = args[++i];
                 case "--jmbe" -> jmbePath = args[++i];
                 case "--mode" -> mode = args[++i];
+                case "--force-mod" -> forceMod = args[++i];
+                case "--force-nac" -> forceNac = Integer.parseInt(args[++i]);
             }
         }
 
@@ -120,8 +126,8 @@ public class DecodeQualityTest
             ChannelConfig config = findChannel(channels, freq);
 
             String channelName = config != null ? config.name() : "Unknown";
-            String modulation = config != null ? config.modulation() : "C4FM";
-            int nac = config != null ? config.nac() : 0;
+            String modulation = forceMod != null ? forceMod : (config != null ? config.modulation() : "C4FM");
+            int nac = forceNac >= 0 ? forceNac : (config != null ? config.nac() : 0);
             String tuner = config != null ? config.preferredTuner() : "N/A";
             String system = config != null ? config.system() : "";
             String site = config != null ? config.site() : "";
@@ -229,19 +235,26 @@ public class DecodeQualityTest
     {
         int[] ldu = {0}, valid = {0}, total = {0}, bitErr = {0}, syncLoss = {0};
         double[] signalSeconds = {0}, totalFileSeconds = {0};
+        Map<String, int[]> duidCounts = new HashMap<>();
+        Map<String, int[]> nacCounts = new HashMap<>();
 
         Listener<IMessage> listener = msg -> {
             if(msg instanceof SyncLossMessage) { syncLoss[0]++; return; }
             if(msg instanceof P25P1Message p)
             {
                 total[0]++;
+                var duid = p.getDUID();
+                duidCounts.computeIfAbsent(duid.name(), k -> new int[]{0, 0});
+                duidCounts.get(duid.name())[0]++;
                 if(p.isValid())
                 {
                     valid[0]++;
-                    var duid = p.getDUID();
+                    duidCounts.get(duid.name())[1]++;
                     if(duid == P25P1DataUnitID.LOGICAL_LINK_DATA_UNIT_1 ||
                        duid == P25P1DataUnitID.LOGICAL_LINK_DATA_UNIT_2) ldu[0]++;
                 }
+                String nacStr = String.valueOf(p.getNAC());
+                nacCounts.computeIfAbsent(nacStr, k -> new int[]{0})[0]++;
                 if(p.getMessage() != null) bitErr[0] += p.getMessage().getCorrectedBitCount();
             }
         };
@@ -290,6 +303,24 @@ public class DecodeQualityTest
             signalSeconds[0] = computeSignalSeconds(bufferRmsValues, bufferSizes, sampleRate);
         }
         catch(Exception e) { System.err.println("  ERROR: " + e.getMessage()); }
+
+        // Print DUID breakdown
+        if(!duidCounts.isEmpty())
+        {
+            System.out.print("  DUIDs: ");
+            duidCounts.entrySet().stream()
+                .sorted((a, b) -> Integer.compare(b.getValue()[0], a.getValue()[0]))
+                .forEach(e -> System.out.printf("%s=%d(%dv) ", e.getKey(), e.getValue()[0], e.getValue()[1]));
+            System.out.println();
+        }
+        if(!nacCounts.isEmpty())
+        {
+            System.out.print("  NACs observed: ");
+            nacCounts.entrySet().stream()
+                .sorted((a, b) -> Integer.compare(b.getValue()[0], a.getValue()[0]))
+                .forEach(e -> System.out.printf("%s(×%d) ", e.getKey(), e.getValue()[0]));
+            System.out.println();
+        }
 
         return new DecodeResult(ldu[0], valid[0], total[0], syncBlocked, bitErr[0], syncLoss[0], signalSeconds[0], totalFileSeconds[0]);
     }

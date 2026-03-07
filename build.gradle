@@ -657,5 +657,11 @@ tasks.register('runDecodeScore', JavaExec) {
     if(project.hasProperty('mode')) {
         argsList.addAll(['--mode', project.property('mode')])
     }
+    if(project.hasProperty('forceMod')) {
+        argsList.addAll(['--force-mod', project.property('forceMod')])
+    }
+    if(project.hasProperty('forceNac')) {
+        argsList.addAll(['--force-nac', project.property('forceNac')])
+    }
     args = argsList
 }
