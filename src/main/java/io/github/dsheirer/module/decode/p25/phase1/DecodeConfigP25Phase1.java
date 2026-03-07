@@ -42,9 +42,10 @@ public class DecodeConfigP25Phase1 extends DecodeConfigP25
 
     /**
      * Maximum audio holdover period in milliseconds.
-     * Increased to 500ms to better handle sync loss during active transmissions.
+     * Increased to 1000ms to support simulcast channels where valid LDUs may arrive at longer intervals
+     * due to multipath NID corruption.
      */
-    public static final int MAX_AUDIO_HOLDOVER_MS = 500;
+    public static final int MAX_AUDIO_HOLDOVER_MS = 1000;
 
     /**
      * Audio frame concealment strategy.
