@@ -50,9 +50,18 @@ public class NBFMDecoderState extends AnalogDecoderState
 
     // Current status
     private volatile String mToneStatus = "No tone detected";
+    private volatile boolean mToneActive = false;
+    private Identifier mToneStatusIdentifier = new SimpleStringIdentifier("No tone detected", IdentifierClass.DECODER, Form.TONE, Role.ANY);
 
     // Per-tone detection counts: key = display string, value = [acceptCount, rejectCount]
     private final Map<String, int[]> mToneCounts = new LinkedHashMap<>();
+
+    private void updateToneStatus(String status)
+    {
+        mToneStatus = status;
+        mToneStatusIdentifier = new SimpleStringIdentifier(status, IdentifierClass.DECODER, Form.TONE, Role.ANY);
+        getIdentifierCollection().update(mToneStatusIdentifier);
+    }
 
     /**
      * Constructs an instance
@@ -97,8 +106,12 @@ public class NBFMDecoderState extends AnalogDecoderState
     {
         if(code != null)
         {
-            mToneStatus = "CTCSS: " + code.getDisplayString() + " [ALLOWED]";
-            incrementCount(code.getDisplayString(), true);
+            if(!mToneActive)
+            {
+                mToneActive = true;
+                incrementCount(code.getDisplayString(), true);
+            }
+            updateToneStatus("CTCSS: " + code.getDisplayString() + " [ALLOWED] #" + mToneCounts.getOrDefault(code.getDisplayString(), new int[]{0,0})[0]);
         }
     }
 
@@ -109,8 +122,12 @@ public class NBFMDecoderState extends AnalogDecoderState
     {
         if(code != null)
         {
-            mToneStatus = "DCS: " + code.toString() + " [ALLOWED]";
-            incrementCount("DCS " + code.toString(), true);
+            if(!mToneActive)
+            {
+                mToneActive = true;
+                incrementCount("DCS " + code.toString(), true);
+            }
+            updateToneStatus("DCS: " + code.toString() + " [ALLOWED] #" + mToneCounts.getOrDefault("DCS " + code.toString(), new int[]{0,0})[0]);
         }
     }
 
@@ -121,7 +138,7 @@ public class NBFMDecoderState extends AnalogDecoderState
     {
         if(code != null)
         {
-            mToneStatus = "CTCSS: " + code.getDisplayString() + " [REJECTED]";
+            updateToneStatus("CTCSS: " + code.getDisplayString() + " [REJECTED]");
             incrementCount(code.getDisplayString(), false);
         }
     }
@@ -133,7 +150,7 @@ public class NBFMDecoderState extends AnalogDecoderState
     {
         if(code != null)
         {
-            mToneStatus = "DCS: " + code.toString() + " [REJECTED]";
+            updateToneStatus("DCS: " + code.toString() + " [REJECTED]");
             incrementCount("DCS " + code.toString(), false);
         }
     }
@@ -143,7 +160,8 @@ public class NBFMDecoderState extends AnalogDecoderState
      */
     public void setToneLost()
     {
-        mToneStatus = "No tone detected";
+        mToneActive = false;
+        updateToneStatus("No tone detected");
     }
 
     private void incrementCount(String toneLabel, boolean accepted)
@@ -217,3 +235,7 @@ public class NBFMDecoderState extends AnalogDecoderState
         return sb.toString();
     }
 }
+
+
+
+
