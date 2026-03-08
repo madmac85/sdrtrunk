@@ -1,6 +1,6 @@
 /*
  * *****************************************************************************
- * Copyright (C) 2014-2025 Dennis Sheirer
+ * Copyright (C) 2014-2026 Dennis Sheirer
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,7 +27,10 @@ import io.github.dsheirer.gui.playlist.source.FrequencyEditor;
 import io.github.dsheirer.gui.playlist.source.SourceConfigurationEditor;
 import io.github.dsheirer.module.decode.DecoderType;
 import io.github.dsheirer.module.decode.config.AuxDecodeConfiguration;
+import io.github.dsheirer.module.decode.config.ChannelToneFilter;
 import io.github.dsheirer.module.decode.config.DecodeConfiguration;
+import io.github.dsheirer.module.decode.ctcss.CTCSSCode;
+import io.github.dsheirer.module.decode.dcs.DCSCode;
 import io.github.dsheirer.module.decode.nbfm.DecodeConfigNBFM;
 import io.github.dsheirer.module.log.EventLogType;
 import io.github.dsheirer.module.log.config.EventLogConfiguration;
@@ -46,7 +49,13 @@ import javafx.beans.value.ObservableValue;
 import javafx.collections.ListChangeListener;
 import javafx.geometry.HPos;
 import javafx.geometry.Insets;
+import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.Separator;
+import javafx.scene.control.Slider;
+import javafx.scene.control.Spinner;
+import javafx.scene.control.SpinnerValueFactory;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextFormatter;
 import javafx.scene.control.TitledPane;
@@ -54,6 +63,9 @@ import javafx.scene.control.Toggle;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.Tooltip;
 import javafx.scene.layout.GridPane;
+import javafx.scene.layout.VBox;
+import javafx.scene.text.Font;
+import javafx.scene.text.FontWeight;
 import javafx.scene.text.TextAlignment;
 import org.controlsfx.control.SegmentedButton;
 import org.controlsfx.control.ToggleSwitch;
@@ -80,6 +92,19 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
     private final TalkgroupValueChangeListener mTalkgroupValueChangeListener = new TalkgroupValueChangeListener();
     private final IntegerFormatter mDecimalFormatter = new IntegerFormatter(1, 65535);
     private final HexFormatter mHexFormatter = new HexFormatter(1, 65535);
+    // === NEW: Tone Filter UI ===
+    private TitledPane mToneFilterPane;
+    private ToggleSwitch mToneFilterEnabledSwitch;
+    private ComboBox<ChannelToneFilter.ToneType> mToneTypeCombo;
+    private ComboBox<CTCSSCode> mCtcssCodeCombo;
+    private ComboBox<DCSCode> mDcsCodeCombo;
+
+    // === NEW: Squelch Tail Removal UI ===
+    private TitledPane mSquelchTailPane;
+    private ToggleSwitch mSquelchTailEnabledSwitch;
+    private Spinner<Integer> mTailRemovalSpinner;
+    private Spinner<Integer> mHeadRemovalSpinner;
+
 
     /**
      * Constructs an instance
@@ -93,6 +118,8 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
         super(playlistManager, tunerManager, userPreferences, filterProcessor);
         getTitledPanesBox().getChildren().add(getSourcePane());
         getTitledPanesBox().getChildren().add(getDecoderPane());
+        getTitledPanesBox().getChildren().add(getToneFilterPane());
+        getTitledPanesBox().getChildren().add(getSquelchTailPane());
         getTitledPanesBox().getChildren().add(getAuxDecoderPane());
         getTitledPanesBox().getChildren().add(getEventLogPane());
         getTitledPanesBox().getChildren().add(getRecordPane());
@@ -146,7 +173,6 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
 
             GridPane.setConstraints(getAudioFilterEnable(), 2, 1);
             gridPane.getChildren().add(getAudioFilterEnable());
-
             mDecoderPane.setContent(gridPane);
 
             //Special handling - the pill button doesn't like to set a selected state if the pane is not expanded,
@@ -162,6 +188,154 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
 
         return mDecoderPane;
     }
+
+    // === NEW: Tone Filter pane ===
+    private TitledPane getToneFilterPane()
+    {
+        if(mToneFilterPane == null)
+        {
+            mToneFilterPane = new TitledPane();
+            mToneFilterPane.setText("Tone Filter (CTCSS / DCS)");
+            mToneFilterPane.setExpanded(false);
+
+            GridPane gridPane = new GridPane();
+            gridPane.setPadding(new Insets(10, 10, 10, 10));
+            gridPane.setHgap(10);
+            gridPane.setVgap(10);
+
+            // Enable switch
+            Label enableLabel = new Label("Enable Tone Filter");
+            GridPane.setHalignment(enableLabel, HPos.RIGHT);
+            GridPane.setConstraints(enableLabel, 0, 0);
+            gridPane.getChildren().add(enableLabel);
+
+            mToneFilterEnabledSwitch = new ToggleSwitch();
+            mToneFilterEnabledSwitch.selectedProperty()
+                    .addListener((obs, ov, nv) -> modifiedProperty().set(true));
+            GridPane.setConstraints(mToneFilterEnabledSwitch, 1, 0);
+            gridPane.getChildren().add(mToneFilterEnabledSwitch);
+
+            Label helpLabel = new Label("When enabled, audio only passes when the selected tone is detected");
+            GridPane.setConstraints(helpLabel, 2, 0, 3, 1);
+            gridPane.getChildren().add(helpLabel);
+
+            // Tone type selector
+            Label typeLabel = new Label("Type");
+            GridPane.setHalignment(typeLabel, HPos.RIGHT);
+            GridPane.setConstraints(typeLabel, 0, 1);
+            gridPane.getChildren().add(typeLabel);
+
+            mToneTypeCombo = new ComboBox<>();
+            mToneTypeCombo.getItems().addAll(ChannelToneFilter.ToneType.CTCSS, ChannelToneFilter.ToneType.DCS);
+            mToneTypeCombo.setValue(ChannelToneFilter.ToneType.CTCSS);
+            mToneTypeCombo.valueProperty().addListener((obs, ov, nv) -> {
+                updateToneCodeVisibility();
+                modifiedProperty().set(true);
+            });
+            GridPane.setConstraints(mToneTypeCombo, 1, 1);
+            gridPane.getChildren().add(mToneTypeCombo);
+
+            // CTCSS code selector
+            mCtcssCodeCombo = new ComboBox<>();
+            mCtcssCodeCombo.getItems().addAll(CTCSSCode.STANDARD_CODES);
+            mCtcssCodeCombo.setPromptText("Select PL tone");
+            mCtcssCodeCombo.setPrefWidth(200);
+            mCtcssCodeCombo.valueProperty().addListener((obs, ov, nv) -> modifiedProperty().set(true));
+            GridPane.setConstraints(mCtcssCodeCombo, 2, 1);
+            gridPane.getChildren().add(mCtcssCodeCombo);
+
+            // DCS code selector (hidden by default)
+            mDcsCodeCombo = new ComboBox<>();
+            mDcsCodeCombo.getItems().addAll(DCSCode.STANDARD_CODES);
+            mDcsCodeCombo.getItems().addAll(DCSCode.INVERTED_CODES);
+            mDcsCodeCombo.setPromptText("Select DCS code");
+            mDcsCodeCombo.setPrefWidth(200);
+            mDcsCodeCombo.setVisible(false);
+            mDcsCodeCombo.setManaged(false);
+            mDcsCodeCombo.valueProperty().addListener((obs, ov, nv) -> modifiedProperty().set(true));
+            GridPane.setConstraints(mDcsCodeCombo, 2, 1);
+            gridPane.getChildren().add(mDcsCodeCombo);
+
+            mToneFilterPane.setContent(gridPane);
+        }
+        return mToneFilterPane;
+    }
+
+    private void updateToneCodeVisibility()
+    {
+        boolean isCTCSS = mToneTypeCombo.getValue() == ChannelToneFilter.ToneType.CTCSS;
+        mCtcssCodeCombo.setVisible(isCTCSS);
+        mCtcssCodeCombo.setManaged(isCTCSS);
+        mDcsCodeCombo.setVisible(!isCTCSS);
+        mDcsCodeCombo.setManaged(!isCTCSS);
+    }
+
+    // === NEW: Squelch Tail Removal pane ===
+    private TitledPane getSquelchTailPane()
+    {
+        if(mSquelchTailPane == null)
+        {
+            mSquelchTailPane = new TitledPane();
+            mSquelchTailPane.setText("Squelch Tail Removal");
+            mSquelchTailPane.setExpanded(false);
+
+            GridPane gridPane = new GridPane();
+            gridPane.setPadding(new Insets(10, 10, 10, 10));
+            gridPane.setHgap(10);
+            gridPane.setVgap(10);
+
+            Label enableLabel = new Label("Enable");
+            GridPane.setHalignment(enableLabel, HPos.RIGHT);
+            GridPane.setConstraints(enableLabel, 0, 0);
+            gridPane.getChildren().add(enableLabel);
+
+            mSquelchTailEnabledSwitch = new ToggleSwitch();
+            mSquelchTailEnabledSwitch.selectedProperty()
+                    .addListener((obs, ov, nv) -> modifiedProperty().set(true));
+            GridPane.setConstraints(mSquelchTailEnabledSwitch, 1, 0);
+            gridPane.getChildren().add(mSquelchTailEnabledSwitch);
+
+            Label tailLabel = new Label("Tail Trim (ms)");
+            GridPane.setHalignment(tailLabel, HPos.RIGHT);
+            GridPane.setConstraints(tailLabel, 0, 1);
+            gridPane.getChildren().add(tailLabel);
+
+            mTailRemovalSpinner = new Spinner<>(0, 300, 100, 10);
+            mTailRemovalSpinner.setEditable(true);
+            mTailRemovalSpinner.setPrefWidth(100);
+            mTailRemovalSpinner.setTooltip(new Tooltip("Milliseconds to trim from end of transmission (removes noise burst)"));
+            mTailRemovalSpinner.getValueFactory().valueProperty()
+                    .addListener((obs, ov, nv) -> modifiedProperty().set(true));
+            GridPane.setConstraints(mTailRemovalSpinner, 1, 1);
+            gridPane.getChildren().add(mTailRemovalSpinner);
+
+            Label headLabel = new Label("Head Trim (ms)");
+            GridPane.setHalignment(headLabel, HPos.RIGHT);
+            GridPane.setConstraints(headLabel, 2, 1);
+            gridPane.getChildren().add(headLabel);
+
+            mHeadRemovalSpinner = new Spinner<>(0, 150, 0, 10);
+            mHeadRemovalSpinner.setEditable(true);
+            mHeadRemovalSpinner.setPrefWidth(100);
+            mHeadRemovalSpinner.setTooltip(new Tooltip("Milliseconds to trim from start of transmission (removes tone ramp-up)"));
+            mHeadRemovalSpinner.getValueFactory().valueProperty()
+                    .addListener((obs, ov, nv) -> modifiedProperty().set(true));
+            GridPane.setConstraints(mHeadRemovalSpinner, 3, 1);
+            gridPane.getChildren().add(mHeadRemovalSpinner);
+
+            mSquelchTailPane.setContent(gridPane);
+        }
+        return mSquelchTailPane;
+    }
+
+
+
+
+
+
+
+
+
 
     private TitledPane getEventLogPane()
     {
@@ -379,7 +553,6 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
         }
     }
 
-
     private ToggleSwitch getBasebandRecordSwitch()
     {
         if(mBasebandRecordSwitch == null)
@@ -412,6 +585,46 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
             updateTextFormatter(decodeConfigNBFM.getTalkgroup());
             getAudioFilterEnable().setDisable(false);
             getAudioFilterEnable().setSelected(decodeConfigNBFM.isAudioFilter());
+
+            // === NEW: Load tone filter settings ===
+            mToneFilterEnabledSwitch.setSelected(decodeConfigNBFM.isToneFilterEnabled());
+            List<ChannelToneFilter> savedFilters = decodeConfigNBFM.getToneFilters();
+            if(savedFilters != null && !savedFilters.isEmpty())
+            {
+                ChannelToneFilter filter = savedFilters.get(0);
+                mToneTypeCombo.setValue(filter.getToneType());
+                updateToneCodeVisibility();
+                if(filter.getToneType() == ChannelToneFilter.ToneType.CTCSS)
+                {
+                    CTCSSCode code = filter.getCTCSSCode();
+                    if(code != null && code != CTCSSCode.UNKNOWN)
+                    {
+                        mCtcssCodeCombo.setValue(code);
+                    }
+                }
+                else if(filter.getToneType() == ChannelToneFilter.ToneType.DCS)
+                {
+                    DCSCode code = filter.getDCSCode();
+                    if(code != null)
+                    {
+                        mDcsCodeCombo.setValue(code);
+                    }
+                }
+            }
+            else
+            {
+                mToneTypeCombo.setValue(ChannelToneFilter.ToneType.CTCSS);
+                mCtcssCodeCombo.setValue(null);
+                mCtcssCodeCombo.setPromptText("Select PL tone");
+                mDcsCodeCombo.setValue(null);
+                mDcsCodeCombo.setPromptText("Select DCS code");
+                updateToneCodeVisibility();
+            }
+
+            // === NEW: Load squelch tail settings ===
+            mSquelchTailEnabledSwitch.setSelected(decodeConfigNBFM.isSquelchTailRemovalEnabled());
+            mTailRemovalSpinner.getValueFactory().setValue(decodeConfigNBFM.getSquelchTailRemovalMs());
+            mHeadRemovalSpinner.getValueFactory().setValue(decodeConfigNBFM.getSquelchHeadRemovalMs());
         }
         else
         {
@@ -426,6 +639,18 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
             getTalkgroupField().setDisable(true);
             getAudioFilterEnable().setDisable(true);
             getAudioFilterEnable().setSelected(false);
+
+            // === NEW: Reset new controls ===
+            mToneFilterEnabledSwitch.setSelected(false);
+            mToneTypeCombo.setValue(ChannelToneFilter.ToneType.CTCSS);
+            mCtcssCodeCombo.setValue(null);
+            mCtcssCodeCombo.setPromptText("Select PL tone");
+            mDcsCodeCombo.setValue(null);
+            mDcsCodeCombo.setPromptText("Select DCS code");
+            updateToneCodeVisibility();
+            mSquelchTailEnabledSwitch.setSelected(false);
+            mTailRemovalSpinner.getValueFactory().setValue(100);
+            mHeadRemovalSpinner.getValueFactory().setValue(0);
         }
     }
 
@@ -461,6 +686,34 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
 
         config.setTalkgroup(talkgroup);
         config.setAudioFilter(getAudioFilterEnable().isSelected());
+
+        // === NEW: Save tone filter settings ===
+        config.setToneFilterEnabled(mToneFilterEnabledSwitch.isSelected());
+        List<ChannelToneFilter> filters = new ArrayList<>();
+        ChannelToneFilter.ToneType selectedType = mToneTypeCombo.getValue();
+        if(selectedType == ChannelToneFilter.ToneType.CTCSS)
+        {
+            CTCSSCode code = mCtcssCodeCombo.getValue();
+            if(code != null && code != CTCSSCode.UNKNOWN)
+            {
+                filters.add(new ChannelToneFilter(selectedType, code.name(), ""));
+            }
+        }
+        else if(selectedType == ChannelToneFilter.ToneType.DCS)
+        {
+            DCSCode code = mDcsCodeCombo.getValue();
+            if(code != null)
+            {
+                filters.add(new ChannelToneFilter(selectedType, code.name(), ""));
+            }
+        }
+        config.setToneFilters(filters);
+
+        // === NEW: Save squelch tail settings ===
+        config.setSquelchTailRemovalEnabled(mSquelchTailEnabledSwitch.isSelected());
+        config.setSquelchTailRemovalMs(mTailRemovalSpinner.getValue());
+        config.setSquelchHeadRemovalMs(mHeadRemovalSpinner.getValue());
+
         getItem().setDecodeConfiguration(config);
     }
 

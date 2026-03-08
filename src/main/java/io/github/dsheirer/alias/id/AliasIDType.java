@@ -23,7 +23,9 @@ import java.util.EnumSet;
 public enum AliasIDType
 {
     BROADCAST_CHANNEL("Audio Broadcast Channel"),
+    CTCSS("Continuous Tone-Coded Squelch System (CTCSS)"),
     DCS("Digital Coded Squelch (DCS)"),
+    NAC("P25 Network Access Code (NAC)"),
     ESN("ESN"),
     INVERT("Audio Inversion"),
     LOJACK("LoJack"),
