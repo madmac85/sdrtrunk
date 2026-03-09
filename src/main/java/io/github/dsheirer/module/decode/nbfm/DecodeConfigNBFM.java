@@ -277,4 +277,58 @@ public class DecodeConfigNBFM extends DecodeConfigAnalog
                 Math.min(SquelchTailRemover.MAXIMUM_HEAD_REMOVAL_MS, ms));
     }
 
+    // ========== VOXSEND AUDIO FILTER CONFIGURATION ==========
+    private boolean mDeemphasisEnabled = true;
+    private double mDeemphasisTimeConstant = 75.0;
+    private boolean mLowPassEnabled = true;
+    private double mLowPassCutoff = 3400.0;
+    private boolean mBassBoostEnabled = false;
+    private float mBassBoostDb = 0.0f;
+    private boolean mNoiseGateEnabled = false;
+    private float mNoiseGateThreshold = 4.0f;
+    private float mNoiseGateReduction = 0.8f;
+    private int mNoiseGateHoldTime = 500;
+    private boolean mAgcEnabled = true;
+    private float mAgcTargetLevel = -18.0f;
+    private float mAgcMaxGain = 24.0f;
+
+    @JacksonXmlProperty(isAttribute = true, localName = "deemphasisEnabled")
+    public boolean isDeemphasisEnabled() { return mDeemphasisEnabled; }
+    public void setDeemphasisEnabled(boolean enabled) { mDeemphasisEnabled = enabled; }
+    @JacksonXmlProperty(isAttribute = true, localName = "deemphasisTimeConstant")
+    public double getDeemphasisTimeConstant() { return mDeemphasisTimeConstant; }
+    public void setDeemphasisTimeConstant(double tc) { mDeemphasisTimeConstant = tc; }
+    @JacksonXmlProperty(isAttribute = true, localName = "lowPassEnabled")
+    public boolean isLowPassEnabled() { return mLowPassEnabled; }
+    public void setLowPassEnabled(boolean enabled) { mLowPassEnabled = enabled; }
+    @JacksonXmlProperty(isAttribute = true, localName = "lowPassCutoff")
+    public double getLowPassCutoff() { return mLowPassCutoff; }
+    public void setLowPassCutoff(double cutoff) { mLowPassCutoff = cutoff; }
+    @JacksonXmlProperty(isAttribute = true, localName = "bassBoostEnabled")
+    public boolean isBassBoostEnabled() { return mBassBoostEnabled; }
+    public void setBassBoostEnabled(boolean enabled) { mBassBoostEnabled = enabled; }
+    @JacksonXmlProperty(isAttribute = true, localName = "bassBoostDb")
+    public float getBassBoostDb() { return mBassBoostDb; }
+    public void setBassBoostDb(float db) { mBassBoostDb = Math.max(0.0f, Math.min(12.0f, db)); }
+    @JacksonXmlProperty(isAttribute = true, localName = "noiseGateEnabled")
+    public boolean isNoiseGateEnabled() { return mNoiseGateEnabled; }
+    public void setNoiseGateEnabled(boolean enabled) { mNoiseGateEnabled = enabled; }
+    @JacksonXmlProperty(isAttribute = true, localName = "noiseGateThreshold")
+    public float getNoiseGateThreshold() { return mNoiseGateThreshold; }
+    public void setNoiseGateThreshold(float t) { mNoiseGateThreshold = Math.max(0.0f, Math.min(100.0f, t)); }
+    @JacksonXmlProperty(isAttribute = true, localName = "noiseGateReduction")
+    public float getNoiseGateReduction() { return mNoiseGateReduction; }
+    public void setNoiseGateReduction(float r) { mNoiseGateReduction = Math.max(0.0f, Math.min(1.0f, r)); }
+    @JacksonXmlProperty(isAttribute = true, localName = "noiseGateHoldTime")
+    public int getNoiseGateHoldTime() { return mNoiseGateHoldTime; }
+    public void setNoiseGateHoldTime(int ms) { mNoiseGateHoldTime = Math.max(0, Math.min(1000, ms)); }
+    @JacksonXmlProperty(isAttribute = true, localName = "agcEnabled")
+    public boolean isAgcEnabled() { return mAgcEnabled; }
+    public void setAgcEnabled(boolean enabled) { mAgcEnabled = enabled; }
+    @JacksonXmlProperty(isAttribute = true, localName = "agcTargetLevel")
+    public float getAgcTargetLevel() { return mAgcTargetLevel; }
+    public void setAgcTargetLevel(float level) { mAgcTargetLevel = level; }
+    @JacksonXmlProperty(isAttribute = true, localName = "agcMaxGain")
+    public float getAgcMaxGain() { return mAgcMaxGain; }
+    public void setAgcMaxGain(float gain) { mAgcMaxGain = gain; }
 }

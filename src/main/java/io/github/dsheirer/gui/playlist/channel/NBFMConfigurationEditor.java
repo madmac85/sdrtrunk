@@ -80,6 +80,7 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
     private TitledPane mEventLogPane;
     private TitledPane mRecordPane;
     private TitledPane mSourcePane;
+    private TitledPane mAudioFiltersPane;
     private TextField mTalkgroupField;
     private ToggleSwitch mAudioFilterEnable;
     private TextFormatter<Integer> mTalkgroupTextFormatter;
@@ -105,6 +106,31 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
     private Spinner<Integer> mTailRemovalSpinner;
     private Spinner<Integer> mHeadRemovalSpinner;
 
+    // === NEW: Audio Filters UI ===
+    private boolean mLoadingConfiguration = false;
+    private Slider mInputGainSlider;
+    private Label mInputGainLabel;
+    private ToggleSwitch mLowPassEnabledSwitch;
+    private Slider mLowPassCutoffSlider;
+    private Label mLowPassCutoffLabel;
+    private ToggleSwitch mDeemphasisEnabledSwitch;
+    private ComboBox<String> mDeemphasisTimeConstantCombo;
+    private ToggleSwitch mVoiceEnhanceEnabledSwitch;
+    private Slider mVoiceEnhanceSlider;
+    private Label mVoiceEnhanceLabel;
+    private ToggleSwitch mBassBoostEnabledSwitch;
+    private Slider mBassBoostSlider;
+    private Label mBassBoostLabel;
+    private ToggleSwitch mSquelchEnabledSwitch;
+    private Slider mSquelchThresholdSlider;
+    private Label mSquelchThresholdLabel;
+    private Slider mSquelchReductionSlider;
+    private Label mSquelchReductionLabel;
+    private Slider mHoldTimeSlider;
+    private Label mHoldTimeLabel;
+    private javafx.scene.control.Button mAnalyzeButton;
+    private Label mAnalyzeStatusLabel;
+
 
     /**
      * Constructs an instance
@@ -118,6 +144,7 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
         super(playlistManager, tunerManager, userPreferences, filterProcessor);
         getTitledPanesBox().getChildren().add(getSourcePane());
         getTitledPanesBox().getChildren().add(getDecoderPane());
+        getTitledPanesBox().getChildren().add(getAudioFiltersPane());
         getTitledPanesBox().getChildren().add(getToneFilterPane());
         getTitledPanesBox().getChildren().add(getSquelchTailPane());
         getTitledPanesBox().getChildren().add(getAuxDecoderPane());
@@ -570,6 +597,8 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
     @Override
     protected void setDecoderConfiguration(DecodeConfiguration config)
     {
+        mLoadingConfiguration = true;
+
         if(config instanceof DecodeConfigNBFM)
         {
             getBandwidthButton().setDisable(false);
@@ -585,6 +614,9 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
             updateTextFormatter(decodeConfigNBFM.getTalkgroup());
             getAudioFilterEnable().setDisable(false);
             getAudioFilterEnable().setSelected(decodeConfigNBFM.isAudioFilter());
+
+            // === NEW: Load audio filter settings ===
+            loadAudioFilterConfiguration(decodeConfigNBFM);
 
             // === NEW: Load tone filter settings ===
             mToneFilterEnabledSwitch.setSelected(decodeConfigNBFM.isToneFilterEnabled());
@@ -640,6 +672,9 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
             getAudioFilterEnable().setDisable(true);
             getAudioFilterEnable().setSelected(false);
 
+            // === NEW: Reset audio filter controls ===
+            disableAudioFilterControls();
+
             // === NEW: Reset new controls ===
             mToneFilterEnabledSwitch.setSelected(false);
             mToneTypeCombo.setValue(ChannelToneFilter.ToneType.CTCSS);
@@ -652,6 +687,8 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
             mTailRemovalSpinner.getValueFactory().setValue(100);
             mHeadRemovalSpinner.getValueFactory().setValue(0);
         }
+
+        mLoadingConfiguration = false;
     }
 
     @Override
@@ -686,6 +723,9 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
 
         config.setTalkgroup(talkgroup);
         config.setAudioFilter(getAudioFilterEnable().isSelected());
+
+        // === NEW: Save audio filter settings ===
+        saveAudioFilterConfiguration(config);
 
         // === NEW: Save tone filter settings ===
         config.setToneFilterEnabled(mToneFilterEnabledSwitch.isSelected());
@@ -800,4 +840,377 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
         SourceConfiguration sourceConfiguration = getSourceConfigurationEditor().getSourceConfiguration();
         getItem().setSourceConfiguration(sourceConfiguration);
     }
+
+
+
+
+
+
+
+
+    private TitledPane getAudioFiltersPane()
+    {
+        if(mAudioFiltersPane == null)
+        {
+            VBox contentBox = new VBox(10);
+            contentBox.setPadding(new Insets(10, 10, 10, 10));
+            contentBox.getChildren().add(createLowPassSection());
+            contentBox.getChildren().add(new Separator());
+            contentBox.getChildren().add(createBassBoostSection());
+            contentBox.getChildren().add(new Separator());
+            contentBox.getChildren().add(createDeemphasisSection());
+            contentBox.getChildren().add(new Separator());
+            contentBox.getChildren().add(createVoiceEnhanceSection());
+            contentBox.getChildren().add(new Separator());
+            contentBox.getChildren().add(createSquelchSection());
+            contentBox.getChildren().add(new Separator());
+            contentBox.getChildren().add(createInputGainSection());
+            mAudioFiltersPane = new TitledPane("Audio Filters", contentBox);
+            mAudioFiltersPane.setExpanded(false);
+        }
+        return mAudioFiltersPane;
+    }
+
+    private VBox createInputGainSection()
+    {
+        VBox section = new VBox(5);
+        Label title = new Label("6. Output Gain (Applied Last)");
+        title.setFont(Font.font(null, FontWeight.BOLD, 12));
+        GridPane controlsPane = new GridPane();
+        controlsPane.setHgap(10);
+        controlsPane.setVgap(5);
+        Label gainLabel = new Label("Gain:");
+        GridPane.setConstraints(gainLabel, 0, 0);
+        controlsPane.getChildren().add(gainLabel);
+        mInputGainSlider = new Slider(0.1, 5.0, 1.0);
+        mInputGainSlider.setMajorTickUnit(1.0);
+        mInputGainSlider.setMinorTickCount(4);
+        mInputGainSlider.setShowTickMarks(true);
+        mInputGainSlider.setShowTickLabels(true);
+        mInputGainSlider.setPrefWidth(300);
+        mInputGainSlider.valueProperty().addListener((obs, old, val) -> {
+            if(!mLoadingConfiguration) {
+                mInputGainLabel.setText(String.format("%.1fx (%.1f dB)", val.floatValue(), 20.0 * Math.log10(val.doubleValue())));
+                modifiedProperty().set(true);
+            }
+        });
+        GridPane.setConstraints(mInputGainSlider, 1, 0);
+        controlsPane.getChildren().add(mInputGainSlider);
+        mInputGainLabel = new Label("1.0x (0.0 dB)");
+        GridPane.setConstraints(mInputGainLabel, 2, 0);
+        controlsPane.getChildren().add(mInputGainLabel);
+        section.getChildren().addAll(title, controlsPane);
+        return section;
+    }
+
+    private VBox createLowPassSection()
+    {
+        VBox section = new VBox(5);
+        Label title = new Label("1. Low-Pass Filter");
+        title.setFont(Font.font(null, FontWeight.BOLD, 12));
+        mLowPassEnabledSwitch = new ToggleSwitch("Enable Low-Pass Filter");
+        mLowPassEnabledSwitch.selectedProperty().addListener((obs, old, val) -> {
+            if(!mLoadingConfiguration) { modifiedProperty().set(true); mLowPassCutoffSlider.setDisable(!val); }
+        });
+        GridPane controlsPane = new GridPane();
+        controlsPane.setHgap(10);
+        controlsPane.setVgap(5);
+        Label cutoffLabel = new Label("Cutoff:");
+        GridPane.setConstraints(cutoffLabel, 0, 0);
+        controlsPane.getChildren().add(cutoffLabel);
+        mLowPassCutoffSlider = new Slider(2500, 4000, 3400);
+        mLowPassCutoffSlider.setMajorTickUnit(500);
+        mLowPassCutoffSlider.setMinorTickCount(4);
+        mLowPassCutoffSlider.setShowTickMarks(true);
+        mLowPassCutoffSlider.setShowTickLabels(true);
+        mLowPassCutoffSlider.setPrefWidth(300);
+        mLowPassCutoffSlider.valueProperty().addListener((obs, old, val) -> {
+            if(!mLoadingConfiguration) { mLowPassCutoffLabel.setText(val.intValue() + " Hz"); modifiedProperty().set(true); }
+        });
+        GridPane.setConstraints(mLowPassCutoffSlider, 1, 0);
+        controlsPane.getChildren().add(mLowPassCutoffSlider);
+        mLowPassCutoffLabel = new Label("3400 Hz");
+        GridPane.setConstraints(mLowPassCutoffLabel, 2, 0);
+        controlsPane.getChildren().add(mLowPassCutoffLabel);
+        section.getChildren().addAll(title, mLowPassEnabledSwitch, controlsPane);
+        return section;
+    }
+
+    private VBox createDeemphasisSection()
+    {
+        VBox section = new VBox(5);
+        Label title = new Label("3. FM De-emphasis");
+        title.setFont(Font.font(null, FontWeight.BOLD, 12));
+        mDeemphasisEnabledSwitch = new ToggleSwitch("Enable De-emphasis");
+        mDeemphasisEnabledSwitch.selectedProperty().addListener((obs, old, val) -> {
+            if(!mLoadingConfiguration) { modifiedProperty().set(true); mDeemphasisTimeConstantCombo.setDisable(!val); }
+        });
+        GridPane controlsPane = new GridPane();
+        controlsPane.setHgap(10);
+        controlsPane.setVgap(5);
+        Label tcLabel = new Label("Time Constant:");
+        GridPane.setConstraints(tcLabel, 0, 0);
+        controlsPane.getChildren().add(tcLabel);
+        mDeemphasisTimeConstantCombo = new ComboBox<>();
+        mDeemphasisTimeConstantCombo.getItems().addAll("75 \u00b5s (North America)", "50 \u00b5s (Europe)");
+        mDeemphasisTimeConstantCombo.setOnAction(e -> { if(!mLoadingConfiguration) modifiedProperty().set(true); });
+        GridPane.setConstraints(mDeemphasisTimeConstantCombo, 1, 0);
+        controlsPane.getChildren().add(mDeemphasisTimeConstantCombo);
+        section.getChildren().addAll(title, mDeemphasisEnabledSwitch, controlsPane);
+        return section;
+    }
+
+    private VBox createVoiceEnhanceSection()
+    {
+        VBox section = new VBox(5);
+        Label title = new Label("4. Voice Enhancement");
+        title.setFont(Font.font(null, FontWeight.BOLD, 12));
+        mVoiceEnhanceEnabledSwitch = new ToggleSwitch("Enable Voice Enhancement");
+        mVoiceEnhanceEnabledSwitch.selectedProperty().addListener((obs, old, val) -> {
+            if(!mLoadingConfiguration) { modifiedProperty().set(true); mVoiceEnhanceSlider.setDisable(!val); }
+        });
+        GridPane controlsPane = new GridPane();
+        controlsPane.setHgap(10);
+        controlsPane.setVgap(5);
+        Label amountLabel = new Label("Amount:");
+        GridPane.setConstraints(amountLabel, 0, 0);
+        controlsPane.getChildren().add(amountLabel);
+        mVoiceEnhanceSlider = new Slider(0, 100, 30);
+        mVoiceEnhanceSlider.setMajorTickUnit(25);
+        mVoiceEnhanceSlider.setMinorTickCount(4);
+        mVoiceEnhanceSlider.setShowTickMarks(true);
+        mVoiceEnhanceSlider.setShowTickLabels(true);
+        mVoiceEnhanceSlider.setPrefWidth(300);
+        mVoiceEnhanceSlider.valueProperty().addListener((obs, old, val) -> {
+            if(!mLoadingConfiguration) { mVoiceEnhanceLabel.setText(val.intValue() + "%"); modifiedProperty().set(true); }
+        });
+        GridPane.setConstraints(mVoiceEnhanceSlider, 1, 0);
+        controlsPane.getChildren().add(mVoiceEnhanceSlider);
+        mVoiceEnhanceLabel = new Label("30%");
+        GridPane.setConstraints(mVoiceEnhanceLabel, 2, 0);
+        controlsPane.getChildren().add(mVoiceEnhanceLabel);
+        section.getChildren().addAll(title, mVoiceEnhanceEnabledSwitch, controlsPane);
+        return section;
+    }
+
+    private VBox createBassBoostSection()
+    {
+        VBox section = new VBox(5);
+        Label title = new Label("2. Bass Boost");
+        title.setFont(Font.font(null, FontWeight.BOLD, 12));
+        mBassBoostEnabledSwitch = new ToggleSwitch("Enable Bass Boost");
+        mBassBoostEnabledSwitch.selectedProperty().addListener((obs, old, val) -> {
+            if(!mLoadingConfiguration) { modifiedProperty().set(true); mBassBoostSlider.setDisable(!val); }
+        });
+        GridPane controlsPane = new GridPane();
+        controlsPane.setHgap(10);
+        controlsPane.setVgap(5);
+        Label amountLabel = new Label("Boost Amount:");
+        GridPane.setConstraints(amountLabel, 0, 0);
+        controlsPane.getChildren().add(amountLabel);
+        mBassBoostSlider = new Slider(0, 12, 0);
+        mBassBoostSlider.setMajorTickUnit(3);
+        mBassBoostSlider.setMinorTickCount(2);
+        mBassBoostSlider.setShowTickMarks(true);
+        mBassBoostSlider.setShowTickLabels(true);
+        mBassBoostSlider.setPrefWidth(300);
+        mBassBoostSlider.valueProperty().addListener((obs, old, val) -> {
+            if(!mLoadingConfiguration) { mBassBoostLabel.setText(String.format("+%.1f dB", val.doubleValue())); modifiedProperty().set(true); }
+        });
+        GridPane.setConstraints(mBassBoostSlider, 1, 0);
+        controlsPane.getChildren().add(mBassBoostSlider);
+        mBassBoostLabel = new Label("+0.0 dB");
+        GridPane.setConstraints(mBassBoostLabel, 2, 0);
+        controlsPane.getChildren().add(mBassBoostLabel);
+        section.getChildren().addAll(title, mBassBoostEnabledSwitch, controlsPane);
+        return section;
+    }
+
+    private VBox createSquelchSection()
+    {
+        VBox section = new VBox(5);
+        Label title = new Label("5. Squelch / Noise Gate");
+        title.setFont(Font.font(null, FontWeight.BOLD, 12));
+        mSquelchEnabledSwitch = new ToggleSwitch("Enable Squelch/Noise Gate");
+        mSquelchEnabledSwitch.selectedProperty().addListener((obs, old, val) -> {
+            if(!mLoadingConfiguration) {
+                modifiedProperty().set(true);
+                mSquelchThresholdSlider.setDisable(!val);
+                mSquelchReductionSlider.setDisable(!val);
+                mHoldTimeSlider.setDisable(!val);
+                mAnalyzeButton.setDisable(!val);
+            }
+        });
+        GridPane analyzePane = new GridPane();
+        analyzePane.setHgap(10);
+        analyzePane.setVgap(5);
+        analyzePane.setPadding(new Insets(5,0,10,0));
+        mAnalyzeButton = new javafx.scene.control.Button("Analyze Audio & Suggest Settings");
+        mAnalyzeButton.setStyle("-fx-font-weight: bold;");
+        mAnalyzeButton.setOnAction(e -> handleAnalyzeClick());
+        GridPane.setConstraints(mAnalyzeButton, 0, 0);
+        analyzePane.getChildren().add(mAnalyzeButton);
+        mAnalyzeStatusLabel = new Label("Click 'Analyze' while transmissions are active");
+        mAnalyzeStatusLabel.setStyle("-fx-text-fill: #666;");
+        GridPane.setConstraints(mAnalyzeStatusLabel, 1, 0);
+        analyzePane.getChildren().add(mAnalyzeStatusLabel);
+        GridPane controlsPane = new GridPane();
+        controlsPane.setHgap(10);
+        controlsPane.setVgap(5);
+        Label threshLabel = new Label("Threshold:");
+        GridPane.setConstraints(threshLabel, 0, 0);
+        controlsPane.getChildren().add(threshLabel);
+        mSquelchThresholdSlider = new Slider(0, 100, 4.0);
+        mSquelchThresholdSlider.setMajorTickUnit(25);
+        mSquelchThresholdSlider.setMinorTickCount(4);
+        mSquelchThresholdSlider.setShowTickMarks(true);
+        mSquelchThresholdSlider.setShowTickLabels(true);
+        mSquelchThresholdSlider.setPrefWidth(300);
+        mSquelchThresholdSlider.valueProperty().addListener((obs, old, val) -> {
+            if(!mLoadingConfiguration) { mSquelchThresholdLabel.setText(String.format("%.1f%%", val.doubleValue())); modifiedProperty().set(true); }
+        });
+        GridPane.setConstraints(mSquelchThresholdSlider, 1, 0);
+        controlsPane.getChildren().add(mSquelchThresholdSlider);
+        mSquelchThresholdLabel = new Label("4.0%");
+        GridPane.setConstraints(mSquelchThresholdLabel, 2, 0);
+        controlsPane.getChildren().add(mSquelchThresholdLabel);
+        Label reductionLabel = new Label("Reduction:");
+        GridPane.setConstraints(reductionLabel, 0, 1);
+        controlsPane.getChildren().add(reductionLabel);
+        mSquelchReductionSlider = new Slider(0, 100, 80);
+        mSquelchReductionSlider.setMajorTickUnit(25);
+        mSquelchReductionSlider.setMinorTickCount(4);
+        mSquelchReductionSlider.setShowTickMarks(true);
+        mSquelchReductionSlider.setShowTickLabels(true);
+        mSquelchReductionSlider.setPrefWidth(300);
+        mSquelchReductionSlider.valueProperty().addListener((obs, old, val) -> {
+            if(!mLoadingConfiguration) { mSquelchReductionLabel.setText(val.intValue() + "%"); modifiedProperty().set(true); }
+        });
+        GridPane.setConstraints(mSquelchReductionSlider, 1, 1);
+        controlsPane.getChildren().add(mSquelchReductionSlider);
+        mSquelchReductionLabel = new Label("80%");
+        GridPane.setConstraints(mSquelchReductionLabel, 2, 1);
+        controlsPane.getChildren().add(mSquelchReductionLabel);
+        Label holdLabel = new Label("Delay (Hold Time):");
+        GridPane.setConstraints(holdLabel, 0, 2);
+        controlsPane.getChildren().add(holdLabel);
+        mHoldTimeSlider = new Slider(0, 1000, 500);
+        mHoldTimeSlider.setMajorTickUnit(250);
+        mHoldTimeSlider.setMinorTickCount(4);
+        mHoldTimeSlider.setShowTickMarks(true);
+        mHoldTimeSlider.setShowTickLabels(true);
+        mHoldTimeSlider.setPrefWidth(300);
+        mHoldTimeSlider.valueProperty().addListener((obs, old, val) -> {
+            if(!mLoadingConfiguration) { mHoldTimeLabel.setText(val.intValue() + " ms"); modifiedProperty().set(true); }
+        });
+        GridPane.setConstraints(mHoldTimeSlider, 1, 2);
+        controlsPane.getChildren().add(mHoldTimeSlider);
+        mHoldTimeLabel = new Label("500 ms");
+        GridPane.setConstraints(mHoldTimeLabel, 2, 2);
+        controlsPane.getChildren().add(mHoldTimeLabel);
+        section.getChildren().addAll(title, mSquelchEnabledSwitch, analyzePane, controlsPane);
+        return section;
+    }
+
+    private void loadAudioFilterConfiguration(DecodeConfigNBFM config)
+    {
+        float inputGain = (float)Math.pow(10.0, config.getAgcMaxGain() / 40.0);
+        mInputGainSlider.setValue(inputGain);
+        mInputGainLabel.setText(String.format("%.1fx (%.1f dB)", inputGain, 20.0 * Math.log10(inputGain)));
+        mLowPassEnabledSwitch.setSelected(config.isLowPassEnabled());
+        mLowPassCutoffSlider.setValue(config.getLowPassCutoff());
+        mLowPassCutoffLabel.setText((int)config.getLowPassCutoff() + " Hz");
+        mLowPassCutoffSlider.setDisable(!config.isLowPassEnabled());
+        mDeemphasisEnabledSwitch.setSelected(config.isDeemphasisEnabled());
+        double tc = config.getDeemphasisTimeConstant();
+        mDeemphasisTimeConstantCombo.setValue(tc == 75.0 ? "75 \u00b5s (North America)" : "50 \u00b5s (Europe)");
+        mDeemphasisTimeConstantCombo.setDisable(!config.isDeemphasisEnabled());
+        mVoiceEnhanceEnabledSwitch.setSelected(config.isAgcEnabled());
+        float targetLevel = config.getAgcTargetLevel();
+        float voiceAmount = ((targetLevel + 30.0f) / 24.0f) * 100.0f;
+        voiceAmount = Math.max(0, Math.min(100, voiceAmount));
+        mVoiceEnhanceSlider.setValue(voiceAmount);
+        mVoiceEnhanceLabel.setText((int)voiceAmount + "%");
+        mVoiceEnhanceSlider.setDisable(!config.isAgcEnabled());
+        mBassBoostEnabledSwitch.setSelected(config.isBassBoostEnabled());
+        float bassBoostDb = config.getBassBoostDb();
+        mBassBoostSlider.setValue(bassBoostDb);
+        mBassBoostLabel.setText(String.format("+%.1f dB", bassBoostDb));
+        mBassBoostSlider.setDisable(!config.isBassBoostEnabled());
+        mSquelchEnabledSwitch.setSelected(config.isNoiseGateEnabled());
+        float thresholdPercent = config.getNoiseGateThreshold();
+        mSquelchThresholdSlider.setValue(thresholdPercent);
+        mSquelchThresholdLabel.setText(String.format("%.1f%%", thresholdPercent));
+        mSquelchReductionSlider.setValue(config.getNoiseGateReduction() * 100.0f);
+        mSquelchReductionLabel.setText((int)(config.getNoiseGateReduction() * 100.0f) + "%");
+        int holdTime = config.getNoiseGateHoldTime();
+        mHoldTimeSlider.setValue(holdTime);
+        mHoldTimeLabel.setText(holdTime + " ms");
+        boolean squelchEnabled = config.isNoiseGateEnabled();
+        mSquelchThresholdSlider.setDisable(!squelchEnabled);
+        mSquelchReductionSlider.setDisable(!squelchEnabled);
+        mHoldTimeSlider.setDisable(!squelchEnabled);
+    }
+
+    private void saveAudioFilterConfiguration(DecodeConfigNBFM config)
+    {
+        float inputGain = (float)mInputGainSlider.getValue();
+        config.setAgcMaxGain((float)(40.0 * Math.log10(inputGain)));
+        config.setLowPassEnabled(mLowPassEnabledSwitch.isSelected());
+        config.setLowPassCutoff(mLowPassCutoffSlider.getValue());
+        config.setDeemphasisEnabled(mDeemphasisEnabledSwitch.isSelected());
+        String selected = mDeemphasisTimeConstantCombo.getValue();
+        config.setDeemphasisTimeConstant((selected != null && selected.startsWith("75")) ? 75.0 : 50.0);
+        config.setAgcEnabled(mVoiceEnhanceEnabledSwitch.isSelected());
+        float voiceAmount = (float)mVoiceEnhanceSlider.getValue();
+        config.setAgcTargetLevel(-30.0f + (voiceAmount / 100.0f * 24.0f));
+        config.setBassBoostEnabled(mBassBoostEnabledSwitch.isSelected());
+        config.setBassBoostDb((float)mBassBoostSlider.getValue());
+        config.setNoiseGateEnabled(mSquelchEnabledSwitch.isSelected());
+        config.setNoiseGateThreshold((float)mSquelchThresholdSlider.getValue());
+        config.setNoiseGateReduction((float)mSquelchReductionSlider.getValue() / 100.0f);
+        config.setNoiseGateHoldTime((int)mHoldTimeSlider.getValue());
+    }
+
+    private void disableAudioFilterControls()
+    {
+        mInputGainSlider.setValue(1.0);
+        mLowPassEnabledSwitch.setSelected(false);
+        mLowPassCutoffSlider.setDisable(true);
+        mDeemphasisEnabledSwitch.setSelected(false);
+        mDeemphasisTimeConstantCombo.setDisable(true);
+        mVoiceEnhanceEnabledSwitch.setSelected(false);
+        mVoiceEnhanceSlider.setDisable(true);
+        mBassBoostEnabledSwitch.setSelected(false);
+        mBassBoostSlider.setDisable(true);
+        mSquelchEnabledSwitch.setSelected(false);
+        mSquelchThresholdSlider.setDisable(true);
+        mSquelchReductionSlider.setDisable(true);
+        mHoldTimeSlider.setDisable(true);
+    }
+
+    private void handleAnalyzeClick()
+    {
+        if(mAnalyzeButton.getText().equals("Analyze Audio & Suggest Settings"))
+        {
+            mAnalyzeButton.setText("Stop Analysis");
+            mAnalyzeStatusLabel.setText("Analyzing... (not yet wired to decoder)");
+            mAnalyzeStatusLabel.setStyle("-fx-text-fill: #0066cc; -fx-font-weight: bold;");
+            new javafx.animation.Timeline(new javafx.animation.KeyFrame(
+                javafx.util.Duration.millis(1000),
+                ae -> {
+                    mAnalyzeStatusLabel.setText("Analysis requires decoder connection (not yet wired)");
+                    mAnalyzeStatusLabel.setStyle("-fx-text-fill: #cc6600;");
+                    mAnalyzeButton.setText("Analyze Audio & Suggest Settings");
+                }
+            )).play();
+        }
+        else
+        {
+            mAnalyzeButton.setText("Analyze Audio & Suggest Settings");
+            mAnalyzeStatusLabel.setText("Analysis stopped");
+            mAnalyzeStatusLabel.setStyle("-fx-text-fill: #666;");
+        }
+    }
 }
+
