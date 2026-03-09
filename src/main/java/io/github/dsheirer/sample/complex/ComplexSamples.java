@@ -25,6 +25,33 @@ package io.github.dsheirer.sample.complex;
 public record ComplexSamples(float[] i, float[] q, long timestamp)
 {
     /**
+     * Applies IQ imbalance correction to this buffer using the supplied corrector.
+     * Modifies the I and Q arrays in-place and returns this instance for method chaining.
+     *
+     * Correction should be applied as early as possible in the signal chain —
+     * ideally before decimation and baseband filtering — so that all downstream
+     * processing benefits from the corrected samples.
+     *
+     * Example usage in a decoder's receive() method:
+     * <pre>
+     *   public void receive(ComplexSamples samples)
+     *   {
+     *       samples.correct(mIQCorrector);
+     *       float[] i = mDecimationFilterI.decimateReal(samples.i());
+     *       ...
+     *   }
+     * </pre>
+     *
+     * @param corrector the adaptive IQ imbalance corrector instance to use
+     * @return this ComplexSamples instance (for optional method chaining)
+     */
+    public ComplexSamples correct(IQImbalanceCorrector corrector)
+    {
+        corrector.process(i(), q());
+        return this;
+    }
+
+    /**
      * Converts this non-interleaved complex samples to interleaved.
      * @return interleaved samples.
      */
@@ -76,4 +103,3 @@ public record ComplexSamples(float[] i, float[] q, long timestamp)
         return new InterleavedComplexSamples(interleaved, timestamp());
     }
 }
-

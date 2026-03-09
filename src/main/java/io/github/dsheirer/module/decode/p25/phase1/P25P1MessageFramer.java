@@ -159,12 +159,16 @@ public class P25P1MessageFramer
 
         if(mSyncDetected)
         {
-            mNIDBuffer[mNIDPointer++] = symbol;
+            if(mNIDPointer < DIBIT_LENGTH_NID)
+            {
+                mNIDBuffer[mNIDPointer++] = symbol;
+            }
 
             if(mNIDPointer >= DIBIT_LENGTH_NID)
             {
                 validNIDDetected = checkNID();
                 mSyncDetected = false;
+                mNIDPointer = 0;
             }
         }
 

@@ -46,6 +46,8 @@ import io.github.dsheirer.sample.Listener;
 import io.github.dsheirer.sample.buffer.IByteBufferProvider;
 import io.github.dsheirer.sample.complex.ComplexSamples;
 import io.github.dsheirer.sample.complex.IComplexSamplesListener;
+import io.github.dsheirer.sample.complex.IQImbalanceCorrector;
+import io.github.dsheirer.sample.complex.NoiseBlanker;
 import io.github.dsheirer.source.ISourceEventListener;
 import io.github.dsheirer.source.ISourceEventProvider;
 import io.github.dsheirer.source.SourceEvent;
@@ -69,6 +71,14 @@ import org.slf4j.LoggerFactory;
  *
  * As a child of the FeedbackDecoder, this decoder provides periodic PLL measurements to the tuner for automatic PPM
  * correction.  It also provides a stream of demodulated soft symbols (in radians) for display to the user.
+ *
+ * IQ Imbalance Correction and Noise Blanking:
+ * An adaptive LMS IQ imbalance corrector runs at the top of the receive pipeline, before decimation
+ * and filtering, correcting gain and phase mismatches inherent in RTL-SDR hardware. Immediately after,
+ * an adaptive noise blanker detects and zeros short high-amplitude impulse spikes (USB noise, switching
+ * supplies, inter-dongle interference) before the decimation filters can smear them downstream.
+ * Both components reset on frequency change events to allow rapid re-convergence on the new channel.
+ * Diagnostic logging of both components is available at DEBUG level.
  */
 public class P25P1DecoderC4FM extends FeedbackDecoder implements IByteBufferProvider, IComplexSamplesListener,
         ISourceEventListener, ISourceEventProvider, Listener<ComplexSamples>
@@ -77,6 +87,10 @@ public class P25P1DecoderC4FM extends FeedbackDecoder implements IByteBufferProv
     private static final DecimalFormat DECIMAL_FORMAT = new DecimalFormat("#.##");
     private static final int SYMBOL_RATE = 4800;
     private static final Map<Double,float[]> BASEBAND_FILTERS = new HashMap<>();
+
+    // How often to log IQ corrector diagnostics (every N sample buffers). Set to 0 to disable.
+    private static final int IQ_DIAGNOSTIC_LOG_INTERVAL = 1000;
+    private int mIQDiagnosticCounter = 0;
 
     private final P25P1DemodulatorC4FM mSymbolProcessor;
     private final P25P1MessageFramer mMessageFramer = new P25P1MessageFramer();
@@ -90,7 +104,26 @@ public class P25P1DecoderC4FM extends FeedbackDecoder implements IByteBufferProv
     {
         mMessageFramer.setAllowedNACs(allowedNACs);
     }
+
     private final PowerMonitor mPowerMonitor = new PowerMonitor();
+
+    /**
+     * Adaptive IQ imbalance corrector.
+     * One instance per decoder — corrects the per-channel I/Q path mismatches introduced
+     * by the RTL-SDR tuner hardware before any decimation or demodulation occurs.
+     * Reset on frequency/correction change events to allow rapid re-convergence.
+     */
+    private final IQImbalanceCorrector mIQImbalanceCorrector = new IQImbalanceCorrector();
+
+    /**
+     * Adaptive noise blanker.
+     * Detects and zeros short high-amplitude impulse spikes (USB noise, switching
+     * supplies, inter-dongle interference) before they reach the decimation filters
+     * and demodulator. Runs after IQ correction at full channelized sample rate
+     * where impulses are sharpest and most reliably detected.
+     */
+    private final NoiseBlanker mNoiseBlanker = new NoiseBlanker();
+
     private DifferentialDemodulatorFloat mDemodulator;
     private IRealDecimationFilter mDecimationFilterI;
     private IRealDecimationFilter mDecimationFilterQ;
@@ -157,34 +190,70 @@ public class P25P1DecoderC4FM extends FeedbackDecoder implements IByteBufferProv
         mSymbolProcessor.setSamplesPerSymbol(mDemodulator.getSamplesPerSymbol());
         mMessageFramer.setListener(mMessageProcessor);
         mMessageProcessor.setMessageListener(getMessageListener());
+
+        // Reset the IQ corrector when sample rate changes so it re-converges cleanly
+        mIQImbalanceCorrector.reset();
+        mNoiseBlanker.reset();
     }
 
     /**
-     * Primary method for processing incoming complex sample buffers
+     * Primary method for processing incoming complex sample buffers.
+     *
+     * Pipeline order:
+     *   1. IQ imbalance correction  (corrects hardware I/Q path mismatches — before everything else)
+     *   2. Decimation               (reduces sample rate toward target ~19.2 kHz)
+     *   3. Power monitoring         (measures channel power on decimated samples)
+     *   4. Baseband filter          (low-pass, removes out-of-band energy)
+     *   5. Pulse shaping filter     (RRC matched filter)
+     *   6. Differential demodulation
+     *   7. Symbol processing / message framing
+     *
      * @param samples containing channelized complex samples
      */
     @Override
     public void receive(ComplexSamples samples)
     {
-        //Update the message framer with the timestamp from the incoming sample buffer.
+        // Update the message framer with the timestamp from the incoming sample buffer.
         mMessageFramer.setTimestamp(samples.timestamp());
 
+        // Step 1: IQ imbalance correction — applied first, before decimation, so all downstream
+        // processing benefits from the corrected samples. Modifies I and Q arrays in-place.
+        samples.correct(mIQImbalanceCorrector);
+
+        // Step 2: Noise blanking — detect and zero impulse spikes before decimation filters
+        // can smear them across multiple samples. Operates on corrected full-rate samples.
+        mNoiseBlanker.process(samples.i(), samples.q());
+
+        // Periodically log corrector and blanker diagnostics at DEBUG level
+        if(LOGGER.isDebugEnabled() && IQ_DIAGNOSTIC_LOG_INTERVAL > 0)
+        {
+            if(++mIQDiagnosticCounter >= IQ_DIAGNOSTIC_LOG_INTERVAL)
+            {
+                mIQDiagnosticCounter = 0;
+                LOGGER.debug("IQ Correction: {}", mIQImbalanceCorrector);
+                LOGGER.debug("Noise Blanker: {}", mNoiseBlanker);
+            }
+        }
+
+        // Step 3: Decimation
         float[] i = mDecimationFilterI.decimateReal(samples.i());
         float[] q = mDecimationFilterQ.decimateReal(samples.q());
 
-        //Process buffer for channel power measurements
+        // Step 4: Channel power measurement
         mPowerMonitor.process(i, q);
 
+        // Step 5: Baseband low-pass filter
         i = mBasebandFilterI.filter(i);
         q = mBasebandFilterQ.filter(q);
 
+        // Step 6: Pulse shaping (RRC matched filter)
         i = mPulseShapingFilterI.filter(i);
         q = mPulseShapingFilterQ.filter(q);
 
-        // PI/4 DQPSK differential demodulation
+        // Step 7: PI/4 DQPSK differential demodulation
         float[] demodulated = mDemodulator.demodulate(i, q);
 
-        //Process demodulated samples into symbols and apply message sync detection and framing.
+        // Step 8: Process demodulated samples into symbols and apply message sync detection and framing.
         mSymbolProcessor.process(demodulated);
     }
 
@@ -203,7 +272,7 @@ public class P25P1DecoderC4FM extends FeedbackDecoder implements IByteBufferProv
                 .sampleRate(sampleRate)
                 .passBandCutoff(5200)
                 .passBandAmplitude(1.0).passBandRipple(0.01) //.01
-                .stopBandAmplitude(0.0).stopBandStart(6500) //6500
+                .stopBandAmplitude(0.0).stopBandStart(7200) //Was 6500; widened transition band reduces filter order/ringing on noise
                 .stopBandRipple(0.01).build();
 
         float[] coefficients = null;
@@ -300,6 +369,10 @@ public class P25P1DecoderC4FM extends FeedbackDecoder implements IByteBufferProv
             case NOTIFICATION_FREQUENCY_CHANGE:
             case NOTIFICATION_FREQUENCY_CORRECTION_CHANGE:
                 mSymbolProcessor.resetPLL();
+                // Reset IQ corrector and noise blanker on retune — new frequency means new
+                // imbalance and noise characteristics; let both re-converge cleanly.
+                mIQImbalanceCorrector.reset();
+                mNoiseBlanker.reset();
                 break;
             case NOTIFICATION_SAMPLE_RATE_CHANGE:
                 setSampleRate(sourceEvent.getValue().doubleValue());
