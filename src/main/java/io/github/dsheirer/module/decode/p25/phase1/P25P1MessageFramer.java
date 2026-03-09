@@ -111,6 +111,10 @@ public class P25P1MessageFramer
     private int mAcquisitionWindowSymbolCount = 0;
     private int mInitialAcquisitionSyncCount = 0;
 
+    // Training sequence listener for LMS-assisted equalization
+    private ITrainingSequenceListener mTrainingListener;
+    private final Dibit[] mTrainingDibits = new Dibit[6]; // 6 dibits = 12 NAC bits
+
     // Strategy 5: Sync flywheel — predict next DUID when sync is lost but frame timing is known
     private static final int MAX_FLYWHEEL_MISSES = 3;
     private boolean mFlywheelActive = false;
@@ -1180,6 +1184,51 @@ public class P25P1MessageFramer
     }
 
     /**
+     * Sets the training sequence listener for LMS-assisted equalization.
+     * When a NID is successfully decoded and the NAC matches the configured NAC,
+     * the listener will be notified with the known NAC dibit sequence.
+     *
+     * @param listener to receive training sequence notifications
+     */
+    public void setTrainingListener(ITrainingSequenceListener listener)
+    {
+        mTrainingListener = listener;
+    }
+
+    /**
+     * Computes the expected dibit sequence for the configured NAC value.
+     * The NAC is 12 bits encoded as 6 dibits (MSB first) in the NID.
+     *
+     * @return array of 6 dibits representing the configured NAC, or null if no NAC is configured
+     */
+    public Dibit[] getTrainingDibits()
+    {
+        int configuredNAC = mNACTracker.getConfiguredNAC();
+
+        if(configuredNAC <= 0)
+        {
+            return null;
+        }
+
+        nacToDibits(configuredNAC, mTrainingDibits);
+        return mTrainingDibits;
+    }
+
+    /**
+     * Converts a 12-bit NAC value to 6 dibits (MSB first).
+     */
+    private static void nacToDibits(int nac, Dibit[] dibits)
+    {
+        for(int i = 0; i < 6; i++)
+        {
+            // Extract 2 bits at a time from MSB to LSB
+            int shift = 10 - (i * 2);
+            int dibitValue = (nac >> shift) & 0x03;
+            dibits[i] = Dibit.fromValue(dibitValue);
+        }
+    }
+
+    /**
      * Sets the listener to receive framed DMR messages.
      * @param listener for messages.
      */
@@ -1245,6 +1294,14 @@ public class P25P1MessageFramer
         }
 
         mNIDDecodeSuccessCount++;
+
+        // Notify training listener when decoded NAC matches configured NAC
+        int configuredNAC = mNACTracker.getConfiguredNAC();
+        if(mTrainingListener != null && configuredNAC > 0 && nac == configuredNAC)
+        {
+            nacToDibits(configuredNAC, mTrainingDibits);
+            mTrainingListener.trainingDibitsAvailable(mTrainingDibits, 6);
+        }
 
         //The BCH decoder can over-correct the NID and produce an invalid NAC.  Compare it against the tracked NAC to
         //flag it as invalid NID when this happens.  The NAC tracker will give us a value of 0 until it has enough

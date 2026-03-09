@@ -33,6 +33,9 @@ public class CMAEqualizer
 {
     public static final int TAP_COUNT = 11;
 
+    /** Equalizer operating mode */
+    public enum EqualizerMode { CMA, LMS_TRAINING, DECISION_DIRECTED }
+
     private final float mModulus;
     private float mMu;
     private boolean mEnabled = true;
@@ -42,6 +45,23 @@ public class CMAEqualizer
     private float mTrackingMu;
     private int mSampleCount = 0;
     private int mGearShiftSamples = 0;  // 0 = disabled (fixed mu)
+
+    // LMS training mode
+    private EqualizerMode mMode = EqualizerMode.CMA;
+    private float mLmsMu = Float.parseFloat(System.getProperty("eq.lms.mu", "0.05"));
+    private boolean mTrainingPending = false;
+    private float mTrainingRefI = 0;
+    private float mTrainingRefQ = 0;
+
+    // Decision-directed mode
+    private float mDdMu = Float.parseFloat(System.getProperty("eq.dd.mu", "0.01"));
+    private boolean mDdEnabled = Boolean.parseBoolean(System.getProperty("eq.dd.enable", "true"));
+    private float mModulusVarianceEma = 1.0f;  // EMA of (|y|^2 - 1)^2
+    private static final float DD_EMA_ALPHA = 0.01f;
+    private static final float DD_CONVERGENCE_THRESHOLD = 0.1f;
+    private float mDdErrorEma = 1.0f;
+    private int mConsecutiveDivergent = 0;
+    private static final int DD_DIVERGENCE_LIMIT = 50;
 
     // Tap coefficients stored as interleaved I/Q pairs: [tap0_I, tap0_Q, tap1_I, tap1_Q, ...]
     private final float[] mTapsI = new float[TAP_COUNT];
@@ -97,6 +117,13 @@ public class CMAEqualizer
         {
             mMu = mAcquisitionMu;
         }
+
+        // Reset mode and convergence state
+        mMode = EqualizerMode.CMA;
+        mTrainingPending = false;
+        mModulusVarianceEma = 1.0f;
+        mDdErrorEma = 1.0f;
+        mConsecutiveDivergent = 0;
     }
 
     /**
@@ -129,6 +156,45 @@ public class CMAEqualizer
     public float getMu()
     {
         return mMu;
+    }
+
+    /**
+     * Sets a training reference symbol for LMS mode. The next equalized sample will use
+     * LMS error (y - d) instead of CMA error. Single-shot: reference is cleared after one use.
+     */
+    public void setTrainingSymbol(float refI, float refQ)
+    {
+        mTrainingPending = true;
+        mTrainingRefI = refI;
+        mTrainingRefQ = refQ;
+    }
+
+    /**
+     * Clears any pending training reference and reverts to CMA mode.
+     */
+    public void clearTraining()
+    {
+        mTrainingPending = false;
+        if(mMode == EqualizerMode.LMS_TRAINING)
+        {
+            mMode = EqualizerMode.CMA;
+        }
+    }
+
+    /**
+     * @return the current equalizer operating mode
+     */
+    public EqualizerMode getMode()
+    {
+        return mMode;
+    }
+
+    /**
+     * @return true if the equalizer has converged (modulus variance below threshold)
+     */
+    public boolean isConverged()
+    {
+        return mModulusVarianceEma < DD_CONVERGENCE_THRESHOLD;
     }
 
     /**
@@ -194,11 +260,69 @@ public class CMAEqualizer
                 yQ += mTapsI[k] * mBufferQ[idx] + mTapsQ[k] * mBufferI[idx];
             }
 
-            // 3. CMA error: e = y * (|y|^2 - R)
+            // 3. Compute error based on current mode
             float norm = yI * yI + yQ * yQ;
-            float errorScale = norm - modulus;
-            float errorI = yI * errorScale;
-            float errorQ = yQ * errorScale;
+            float errorI, errorQ;
+            float effectiveMu = mu;
+
+            // Update convergence metric (always, regardless of mode)
+            float modulusError = norm - modulus;
+            mModulusVarianceEma = (1.0f - DD_EMA_ALPHA) * mModulusVarianceEma +
+                DD_EMA_ALPHA * modulusError * modulusError;
+
+            if(mTrainingPending)
+            {
+                // LMS training: error = y - d (known reference)
+                errorI = yI - mTrainingRefI;
+                errorQ = yQ - mTrainingRefQ;
+                effectiveMu = mLmsMu;
+                mTrainingPending = false;
+            }
+            else if(mDdEnabled && mMode == EqualizerMode.DECISION_DIRECTED)
+            {
+                // Decision-directed: snap to nearest pi/4 DQPSK constellation point
+                float dHatI, dHatQ;
+                // Nearest point by quadrant: (±1/√2, ±1/√2) normalized to unit circle
+                float invSqrt2 = 0.7071068f;
+                dHatI = yI >= 0 ? invSqrt2 : -invSqrt2;
+                dHatQ = yQ >= 0 ? invSqrt2 : -invSqrt2;
+                errorI = yI - dHatI;
+                errorQ = yQ - dHatQ;
+                effectiveMu = mDdMu;
+
+                // Track DD error for divergence detection
+                float ddErr = errorI * errorI + errorQ * errorQ;
+                mDdErrorEma = (1.0f - DD_EMA_ALPHA) * mDdErrorEma + DD_EMA_ALPHA * ddErr;
+                if(mDdErrorEma > DD_CONVERGENCE_THRESHOLD * 2)
+                {
+                    mConsecutiveDivergent++;
+                    if(mConsecutiveDivergent >= DD_DIVERGENCE_LIMIT)
+                    {
+                        // Fall back to CMA
+                        mMode = EqualizerMode.CMA;
+                        mConsecutiveDivergent = 0;
+                    }
+                }
+                else
+                {
+                    mConsecutiveDivergent = 0;
+                }
+            }
+            else
+            {
+                // CMA: e = y * (|y|^2 - R)
+                float errorScale = norm - modulus;
+                errorI = yI * errorScale;
+                errorQ = yQ * errorScale;
+
+                // Auto-switch to DD if converged
+                if(mDdEnabled && mMode == EqualizerMode.CMA && mModulusVarianceEma < DD_CONVERGENCE_THRESHOLD)
+                {
+                    mMode = EqualizerMode.DECISION_DIRECTED;
+                    mDdErrorEma = mModulusVarianceEma;
+                    mConsecutiveDivergent = 0;
+                }
+            }
 
             // Clip error to prevent instability
             float errorMag = errorI * errorI + errorQ * errorQ;
@@ -216,8 +340,8 @@ public class CMAEqualizer
                 // conj(x) * e = (xI - j*xQ) * (eI + j*eQ)
                 float conjXeI = mBufferI[idx] * errorI + mBufferQ[idx] * errorQ;
                 float conjXeQ = mBufferI[idx] * errorQ - mBufferQ[idx] * errorI;
-                mTapsI[k] -= mu * conjXeI;
-                mTapsQ[k] -= mu * conjXeQ;
+                mTapsI[k] -= effectiveMu * conjXeI;
+                mTapsQ[k] -= effectiveMu * conjXeQ;
             }
 
             // 5. Write equalized output
