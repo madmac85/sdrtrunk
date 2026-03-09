@@ -53,11 +53,19 @@ public class DecodeConfigP25Phase1 extends DecodeConfigP25
     public static final int MAX_IMBE_ERRORS_MINIMUM = 0;
     public static final int MAX_IMBE_ERRORS_MAXIMUM = 10;
 
+    /**
+     * BCH error correction threshold for NAC-assisted NID decode.
+     */
+    public static final int MAX_BCH_ERRORS_MINIMUM = 1;
+    public static final int MAX_BCH_ERRORS_MAXIMUM = 11;
+    public static final int MAX_BCH_ERRORS_DEFAULT = 5;
+
     private Modulation mModulation = Modulation.C4FM;
     private int mConfiguredNAC = 0; // 0 = auto-detect, 1-4095 = configured NAC
     private int mAudioHoldoverMs = DEFAULT_AUDIO_HOLDOVER_MS;
     private boolean mIgnoreEncryptionState = false;
     private int mMaxImbeErrors = 0; // 0 = disabled, 1-10 = quality gate threshold
+    private int mMaxBchErrors = MAX_BCH_ERRORS_DEFAULT;
 
     /**
      * Constructs an instance
@@ -204,6 +212,29 @@ public class DecodeConfigP25Phase1 extends DecodeConfigP25
     public void setMaxImbeErrors(int maxErrors)
     {
         mMaxImbeErrors = Math.max(MAX_IMBE_ERRORS_MINIMUM, Math.min(MAX_IMBE_ERRORS_MAXIMUM, maxErrors));
+    }
+
+    /**
+     * Gets the maximum BCH error corrections allowed for NAC-assisted NID decode.
+     * Controls how many bit corrections are accepted when using configured NAC and DUID enumeration.
+     * Lower values reject more aggressively (filtering corrupted frames), higher values accept more corrections.
+     *
+     * @return max BCH errors threshold (1-11, default 5)
+     */
+    @JacksonXmlProperty(isAttribute = true, localName = "maxBchErrors")
+    public int getMaxBchErrors()
+    {
+        return mMaxBchErrors;
+    }
+
+    /**
+     * Sets the maximum BCH error corrections for NAC-assisted NID decode.
+     *
+     * @param maxErrors maximum BCH corrections allowed (1-11)
+     */
+    public void setMaxBchErrors(int maxErrors)
+    {
+        mMaxBchErrors = Math.max(MAX_BCH_ERRORS_MINIMUM, Math.min(MAX_BCH_ERRORS_MAXIMUM, maxErrors));
     }
 
     /**

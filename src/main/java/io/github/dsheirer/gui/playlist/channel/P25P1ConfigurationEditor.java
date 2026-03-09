@@ -83,6 +83,8 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
     private Label mIgnoreEncryptionLabel;
     private Spinner<Integer> mMaxImbeErrorsSpinner;
     private Label mMaxImbeErrorsLabel;
+    private Spinner<Integer> mMaxBchErrorsSpinner;
+    private Label mMaxBchErrorsLabel;
 
     /**
      * Constructs an instance
@@ -185,6 +187,21 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
 
             GridPane.setConstraints(getMaxImbeErrorsSpinner(), 4, 3);
             gridPane.getChildren().add(getMaxImbeErrorsSpinner());
+
+            // BCH threshold (row 4) - only visible for LSM v2
+            mMaxBchErrorsLabel = new Label("BCH Threshold:");
+            mMaxBchErrorsLabel.setTooltip(new Tooltip(
+                "BCH error correction threshold for NAC-assisted NID decode.\n" +
+                "5 = recommended default (good for most simulcast)\n" +
+                "11 = accept all corrections (better for severe simulcast like LFD)\n" +
+                "1-3 = strict (may miss valid frames)\n" +
+                "Only active when NAC is configured."));
+            GridPane.setHalignment(mMaxBchErrorsLabel, HPos.RIGHT);
+            GridPane.setConstraints(mMaxBchErrorsLabel, 0, 4);
+            gridPane.getChildren().add(mMaxBchErrorsLabel);
+
+            GridPane.setConstraints(getMaxBchErrorsSpinner(), 1, 4);
+            gridPane.getChildren().add(getMaxBchErrorsSpinner());
 
             // Update visibility based on modulation selection
             updateLSMv2OptionsVisibility();
@@ -409,6 +426,15 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
         }
         getMaxImbeErrorsSpinner().setVisible(showV2Options);
         getMaxImbeErrorsSpinner().setManaged(showV2Options);
+
+        // BCH threshold spinner
+        if(mMaxBchErrorsLabel != null)
+        {
+            mMaxBchErrorsLabel.setVisible(showV2Options);
+            mMaxBchErrorsLabel.setManaged(showV2Options);
+        }
+        getMaxBchErrorsSpinner().setVisible(showV2Options);
+        getMaxBchErrorsSpinner().setManaged(showV2Options);
     }
 
     private ToggleSwitch getIgnoreEncryptionSwitch()
@@ -445,6 +471,29 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
         return mMaxImbeErrorsSpinner;
     }
 
+    private Spinner<Integer> getMaxBchErrorsSpinner()
+    {
+        if(mMaxBchErrorsSpinner == null)
+        {
+            mMaxBchErrorsSpinner = new Spinner<>();
+            mMaxBchErrorsSpinner.setDisable(true);
+            mMaxBchErrorsSpinner.setTooltip(new Tooltip(
+                "BCH error correction threshold for NAC-assisted NID decode.\n" +
+                "5 = recommended default (good for most simulcast)\n" +
+                "11 = accept all corrections (better for severe simulcast)\n" +
+                "1-3 = strict (may miss valid frames)"));
+            mMaxBchErrorsSpinner.getStyleClass().add(Spinner.STYLE_CLASS_SPLIT_ARROWS_HORIZONTAL);
+            mMaxBchErrorsSpinner.setPrefWidth(80);
+            SpinnerValueFactory<Integer> svf = new SpinnerValueFactory.IntegerSpinnerValueFactory(
+                DecodeConfigP25Phase1.MAX_BCH_ERRORS_MINIMUM, DecodeConfigP25Phase1.MAX_BCH_ERRORS_MAXIMUM,
+                DecodeConfigP25Phase1.MAX_BCH_ERRORS_DEFAULT);
+            mMaxBchErrorsSpinner.setValueFactory(svf);
+            mMaxBchErrorsSpinner.getValueFactory().valueProperty()
+                .addListener((observable, oldValue, newValue) -> modifiedProperty().set(true));
+        }
+        return mMaxBchErrorsSpinner;
+    }
+
     private RecordConfigurationEditor getRecordConfigurationEditor()
     {
         if(mRecordConfigurationEditor == null)
@@ -474,6 +523,7 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
         getNACSpinner().setDisable(!enabled);
         getIgnoreEncryptionSwitch().setDisable(!enabled);
         getMaxImbeErrorsSpinner().setDisable(!enabled);
+        getMaxBchErrorsSpinner().setDisable(!enabled);
 
         if(config instanceof DecodeConfigP25Phase1 decodeConfig)
         {
@@ -484,6 +534,7 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
             // LSM v2 options
             getIgnoreEncryptionSwitch().setSelected(decodeConfig.isIgnoreEncryptionState());
             getMaxImbeErrorsSpinner().getValueFactory().setValue(decodeConfig.getMaxImbeErrors());
+            getMaxBchErrorsSpinner().getValueFactory().setValue(decodeConfig.getMaxBchErrors());
 
             getC4FMToggleButton().setSelected(false);
             getLSMToggleButton().setSelected(false);
@@ -509,6 +560,7 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
             getNACSpinner().getValueFactory().setValue(0);
             getIgnoreEncryptionSwitch().setSelected(false);
             getMaxImbeErrorsSpinner().getValueFactory().setValue(0);
+            getMaxBchErrorsSpinner().getValueFactory().setValue(DecodeConfigP25Phase1.MAX_BCH_ERRORS_DEFAULT);
         }
     }
 
@@ -533,6 +585,7 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
         // LSM v2 options
         config.setIgnoreEncryptionState(getIgnoreEncryptionSwitch().isSelected());
         config.setMaxImbeErrors(getMaxImbeErrorsSpinner().getValue() != null ? getMaxImbeErrorsSpinner().getValue() : 0);
+        config.setMaxBchErrors(getMaxBchErrorsSpinner().getValue() != null ? getMaxBchErrorsSpinner().getValue() : DecodeConfigP25Phase1.MAX_BCH_ERRORS_DEFAULT);
 
         if(getC4FMToggleButton().isSelected())
         {

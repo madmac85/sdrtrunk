@@ -111,6 +111,15 @@ public class P25P1MessageFramer
     private int mAcquisitionWindowSymbolCount = 0;
     private int mInitialAcquisitionSyncCount = 0;
 
+    // Strategy 5: Sync flywheel — predict next DUID when sync is lost but frame timing is known
+    private static final int MAX_FLYWHEEL_MISSES = 3;
+    private boolean mFlywheelActive = false;
+    private boolean mFlywheelAssembly = false; // true when current assembler is from flywheel prediction
+    private int mFlywheelConsecutiveMisses = 0;
+    private int mFlywheelAttemptCount = 0;
+    private int mFlywheelSuccessCount = 0;
+    private int mFlywheelMissCount = 0;
+
     /**
      * Constructs an instance
      */
@@ -267,12 +276,14 @@ public class P25P1MessageFramer
             return;
         }
 
-        //Allow sync detection when no assembler is active, or when the assembler is a speculative placeholder.
+        //Allow sync detection when no assembler is active, when the assembler is a speculative placeholder,
+        //or when the assembler is a flywheel prediction (so real syncs can interrupt flywheel).
         //Placeholders are created when NID decode fails — they collect data speculatively but are discarded on
         //dispatch.  Blocking syncs during placeholder assembly prevents recovery from sample drops/discontinuities
         //that corrupt the demodulator state.  Real message assembly (known DUIDs) remains protected.
         if(mMessageAssembler == null ||
-           mMessageAssembler.getDataUnitID() == P25P1DataUnitID.PLACE_HOLDER)
+           mMessageAssembler.getDataUnitID() == P25P1DataUnitID.PLACE_HOLDER ||
+           mFlywheelAssembly)
         {
             mSyncDetected = true;
             mNIDPointer = 0;
@@ -350,12 +361,37 @@ public class P25P1MessageFramer
             {
                 mMessageAssembler = new P25P1MessageAssembler(mDetectedNAC, mDetectedDataUnitID);
                 mMessageAssemblyRequired = false;
+                mFlywheelAssembly = false;
+            }
+            //Strategy 5: Flywheel — predict DUID when sync is lost but frame timing is known
+            else if(mFlywheelActive && mFlywheelConsecutiveMisses < MAX_FLYWHEEL_MISSES && mDetectedNAC > 0)
+            {
+                P25P1DataUnitID predicted = predictNextDUID(mPreviousDataUnitID);
+
+                if(predicted != null)
+                {
+                    mDetectedDataUnitID = predicted;
+                    mMessageAssembler = new P25P1MessageAssembler(mDetectedNAC, predicted);
+                    mFlywheelAssembly = true;
+                    mFlywheelAttemptCount++;
+                    mFlywheelConsecutiveMisses++;
+                    mFlywheelMissCount++;
+                }
+                else
+                {
+                    //Can't predict — fall through to placeholder
+                    mDetectedDataUnitID = P25P1DataUnitID.PLACE_HOLDER;
+                    mMessageAssembler = new P25P1MessageAssembler(mDetectedNAC, mDetectedDataUnitID);
+                    mFlywheelAssembly = false;
+                    mFlywheelActive = false;
+                }
             }
             else if(mDetectedNAC > 0)
             {
                 //Start a placeholder message assembly.  If it completes before another sync detect, throw it away
                 mDetectedDataUnitID = P25P1DataUnitID.PLACE_HOLDER;
                 mMessageAssembler = new P25P1MessageAssembler(mDetectedNAC, mDetectedDataUnitID);
+                mFlywheelAssembly = false;
             }
         }
         else if(mDibitCounter >= 4800) //4800x (1-sec).
@@ -875,6 +911,20 @@ public class P25P1MessageFramer
 
         mDetectedSyncBitErrors = detectedBitErrors;
 
+        //Strategy 5: Activate flywheel on valid NID decode, reset consecutive miss counter
+        if(mDetectedDataUnitID != P25P1DataUnitID.PLACE_HOLDER)
+        {
+            mFlywheelActive = true;
+            if(mFlywheelAssembly)
+            {
+                //A real sync arrived during flywheel assembly — count the flywheel as successful
+                mFlywheelSuccessCount++;
+                mFlywheelMissCount--;
+            }
+            mFlywheelConsecutiveMisses = 0;
+            mFlywheelAssembly = false;
+        }
+
         //If there is a message assembler (still) active, force it to complete
         if(mMessageAssembler != null)
         {
@@ -1013,15 +1063,37 @@ public class P25P1MessageFramer
     }
 
     /**
+     * Predicts the next DUID based on the P25 superframe sequence.
+     * Returns null if prediction is not possible (end of voice, control channel, unknown state).
+     *
+     * P25 voice superframe: HDU → LDU1 → LDU2 → LDU1 → LDU2 → ... → TDU/TDULC
+     * The flywheel only predicts within the LDU1↔LDU2 alternation (both have identical frame length).
+     */
+    private P25P1DataUnitID predictNextDUID(P25P1DataUnitID previousDUID)
+    {
+        return switch(previousDUID)
+        {
+            case HEADER_DATA_UNIT -> P25P1DataUnitID.LOGICAL_LINK_DATA_UNIT_1;
+            case LOGICAL_LINK_DATA_UNIT_1 -> P25P1DataUnitID.LOGICAL_LINK_DATA_UNIT_2;
+            case LOGICAL_LINK_DATA_UNIT_2 -> P25P1DataUnitID.LOGICAL_LINK_DATA_UNIT_1;
+            default -> null; //TDU, TDULC, TSBK, PDU, PLACEHOLDER — can't predict
+        };
+    }
+
+    /**
      * Returns diagnostic statistics for analysis.
      */
     public String getDiagnostics()
     {
         double nidSuccessRate = mSyncDetectionCount > 0 ?
                 (double) mNIDDecodeSuccessCount / mSyncDetectionCount * 100.0 : 0;
-        return String.format("Sync: %d (initial: %d, fallback: %d, recovery: %d, fade: %d) | NID success: %d (%.1f%%) | NID fail: %d",
-                mSyncDetectionCount, mInitialAcquisitionSyncCount, mFallbackSyncCount, mRecoverySyncCount, mFadeRecoverySyncCount,
-                mNIDDecodeSuccessCount, nidSuccessRate, mNIDDecodeFailCount);
+        return String.format("Sync: %d (initial: %d, fallback: %d, recovery: %d, fade: %d) | " +
+                        "NID success: %d (%.1f%%) | NID fail: %d | " +
+                        "Flywheel: %d attempts, %d success, %d miss",
+                mSyncDetectionCount, mInitialAcquisitionSyncCount, mFallbackSyncCount,
+                mRecoverySyncCount, mFadeRecoverySyncCount,
+                mNIDDecodeSuccessCount, nidSuccessRate, mNIDDecodeFailCount,
+                mFlywheelAttemptCount, mFlywheelSuccessCount, mFlywheelMissCount);
     }
 
     /**

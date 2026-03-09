@@ -289,9 +289,7 @@ public class DecoderFactory
                     if(p1.hasConfiguredNAC())
                     {
                         lsmv2Decoder.setConfiguredNAC(p1.getConfiguredNAC());
-                        // Limit NAC-assisted BCH corrections to T=5 for simulcast channels.
-                        // Higher thresholds accept NIDs with wrong DUIDs that corrupt framer state.
-                        lsmv2Decoder.getMessageFramer().setMaxBchErrors(5);
+                        lsmv2Decoder.getMessageFramer().setMaxBchErrors(p1.getMaxBchErrors());
                     }
                     modules.add(lsmv2Decoder);
                     break;

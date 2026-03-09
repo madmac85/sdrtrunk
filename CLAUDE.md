@@ -123,6 +123,8 @@ The `sourceSets` in build.gradle map `src/main` and `src/test` directly (not `sr
 ## Active Technologies
 - Java 25+ (OpenJDK with `--enable-preview`) + JMBE 1.0.0 (IMBE codec), java-lame (MP3 encoding) (013-fix-c4fm-audio-corruption)
 - N/A (file-based test I/O only) (013-fix-c4fm-audio-corruption)
+- Java 25+ (OpenJDK with `--enable-preview`, `jdk.incubator.vector`) + JMBE 1.0.9 (IMBE codec), SDRTrunk DSP pipeline (018-lfd-simulcast-decode)
+- File-based (baseband WAV samples, MP3 audio output, JSON metrics) (018-lfd-simulcast-decode)
 
 ## Recent Changes
 - 013-fix-c4fm-audio-corruption: Added Java 25+ (OpenJDK with `--enable-preview`) + JMBE 1.0.0 (IMBE codec), java-lame (MP3 encoding)

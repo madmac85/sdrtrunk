@@ -22,6 +22,7 @@ package io.github.dsheirer.module.decode.p25.phase1;
 import io.github.dsheirer.dsp.filter.FilterFactory;
 import io.github.dsheirer.dsp.filter.decimate.DecimationFilterFactory;
 import io.github.dsheirer.dsp.filter.decimate.IRealDecimationFilter;
+import io.github.dsheirer.dsp.filter.equalizer.CMAEqualizer;
 import io.github.dsheirer.dsp.filter.fir.FIRFilterSpecification;
 import io.github.dsheirer.dsp.filter.fir.real.IRealFilter;
 import io.github.dsheirer.dsp.filter.fir.real.RealFIRFilter;
@@ -69,6 +70,8 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
     private final P25P1MessageFramer mMessageFramer = new P25P1MessageFramer();
     private final P25P1MessageProcessor mMessageProcessor = new P25P1MessageProcessor();
     private final PowerMonitor mPowerMonitor = new PowerMonitor();
+    private final CMAEqualizer mEqualizer = new CMAEqualizer(1.0f,
+            Float.parseFloat(System.getProperty("cma.mu", "0.001")));
     private IRealDecimationFilter mDecimationFilterI;
     private IRealDecimationFilter mDecimationFilterQ;
     private IRealFilter mBasebandFilterI;
@@ -101,6 +104,22 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
         mDemodulator = new P25P1DemodulatorLSMv2(mMessageFramer, this);
         // Strategy 1: Provide energy state to message framer for adaptive sync threshold
         mMessageFramer.setEnergyProvider(this);
+
+        // Configure gear-shifting if system properties are set
+        // cma.acq.mu = acquisition mu (fast convergence after cold-start)
+        // cma.trk.mu = tracking mu (low distortion during steady state)
+        // cma.shift.ms = time in ms before switching (at ~25kHz decimated rate)
+        String acqMu = System.getProperty("cma.acq.mu");
+        String trkMu = System.getProperty("cma.trk.mu");
+        String shiftMs = System.getProperty("cma.shift.ms");
+        if(acqMu != null && trkMu != null && shiftMs != null)
+        {
+            float acq = Float.parseFloat(acqMu);
+            float trk = Float.parseFloat(trkMu);
+            // Convert ms to samples at ~25kHz decimated rate
+            int shiftSamples = (int)(Float.parseFloat(shiftMs) * 25.0f);
+            mEqualizer.setGearShift(acq, trk, shiftSamples);
+        }
     }
 
     @Override
@@ -183,6 +202,9 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
         i = mPulseShapingFilterI.filter(i);
         q = mPulseShapingFilterQ.filter(q);
 
+        //Adaptive equalization to compensate for simulcast multipath ISI
+        mEqualizer.equalize(i, q);
+
         //Demodulate samples into symbols with timing, sync detection, and message framing.
         mDemodulator.process(i, q);
     }
@@ -227,6 +249,7 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
                 {
                     // Transition from silence to signal — new transmission starting
                     mDemodulator.coldStartReset();
+                    mEqualizer.reset();
                     mMessageFramer.coldStartReset();
                     // Strategy 2: Activate boundary recovery for hard sync detection
                     mMessageFramer.setBoundaryRecoveryActive(true);
@@ -427,6 +450,14 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
     public P25P1DemodulatorLSMv2 getDemodulator()
     {
         return mDemodulator;
+    }
+
+    /**
+     * Returns the CMA equalizer for configuration access.
+     */
+    public CMAEqualizer getEqualizer()
+    {
+        return mEqualizer;
     }
 
     /**

@@ -675,5 +675,10 @@ tasks.register('runDecodeScore', JavaExec) {
     if(project.hasProperty('segmentGap')) {
         argsList.addAll(['--segment-gap', project.property('segmentGap')])
     }
+    if(project.hasProperty('sysprop')) {
+        project.property('sysprop').split(',').each { prop ->
+            jvmArgs += "-D${prop}"
+        }
+    }
     args = argsList
 }
