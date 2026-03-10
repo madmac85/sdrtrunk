@@ -198,6 +198,9 @@ public class P25P1DemodulatorC4FMv2
                 samplesPointer += copyLength;
                 bufferPointer -= copyLength;
 
+                // V2: Adjust Gardner's previous offset for buffer shift
+                mPreviousSymbolBufferOffset -= copyLength;
+
                 //Unwrap phases
                 for(int x = mBuffer.length - copyLength; x < mBuffer.length; x++)
                 {
