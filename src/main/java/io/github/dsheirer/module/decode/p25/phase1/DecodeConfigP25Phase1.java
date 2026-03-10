@@ -82,7 +82,7 @@ public class DecodeConfigP25Phase1 extends DecodeConfigP25
     // C4FM V2 configuration
     private float mGardnerBandwidth = 0.01f;
     private float mAfcAlpha = 0.01f;
-    private boolean mAdaptiveThresholds = true;
+    private boolean mAdaptiveThresholds = false;
 
     /**
      * Constructs an instance

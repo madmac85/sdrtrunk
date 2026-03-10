@@ -112,7 +112,7 @@ public class P25P1DemodulatorC4FMv2
 
     // Adaptive threshold state
     private float mAmplitudeEstimate = 1.0f;
-    private boolean mAdaptiveThresholdsEnabled = true;
+    private boolean mAdaptiveThresholdsEnabled = false;
     private static final float AMPLITUDE_MIN = 0.5f;
     private static final float AMPLITUDE_MAX = 1.5f;
 
