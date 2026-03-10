@@ -29,7 +29,8 @@ public enum Modulation
     @JsonEnumDefaultValue
     CQPSK("Simulcast (LSM)"),
     CQPSK_V2("Conventional (LSM v2)"),
-    C4FM("Normal (C4FM)");
+    C4FM("Normal (C4FM)"),
+    C4FM_V2("Conventional (C4FM v2)");
 
     private final String mLabel;
 

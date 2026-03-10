@@ -79,6 +79,11 @@ public class DecodeConfigP25Phase1 extends DecodeConfigP25
     private float mCmaTrackingMu = 0.001f;   // Stable tracking, proven +69% LDUs on ROC W simulcast
     private int mCmaGearShiftMs = 200;        // 200ms acquisition before switching to tracking
 
+    // C4FM V2 configuration
+    private float mGardnerBandwidth = 0.01f;
+    private float mAfcAlpha = 0.01f;
+    private boolean mAdaptiveThresholds = true;
+
     /**
      * Constructs an instance
      */
@@ -301,6 +306,51 @@ public class DecodeConfigP25Phase1 extends DecodeConfigP25
     public void setCmaGearShiftMs(int ms)
     {
         mCmaGearShiftMs = Math.max(CMA_GEAR_SHIFT_MS_MINIMUM, Math.min(CMA_GEAR_SHIFT_MS_MAXIMUM, ms));
+    }
+
+    /**
+     * Gets the Gardner TED loop bandwidth for C4FM V2.
+     * @return bandwidth (default: 0.01)
+     */
+    @JacksonXmlProperty(isAttribute = true, localName = "gardnerBandwidth")
+    public float getGardnerBandwidth()
+    {
+        return mGardnerBandwidth;
+    }
+
+    public void setGardnerBandwidth(float bandwidth)
+    {
+        mGardnerBandwidth = Math.max(0.001f, Math.min(0.1f, bandwidth));
+    }
+
+    /**
+     * Gets the AFC tracking alpha for C4FM V2.
+     * @return alpha (default: 0.01)
+     */
+    @JacksonXmlProperty(isAttribute = true, localName = "afcAlpha")
+    public float getAfcAlpha()
+    {
+        return mAfcAlpha;
+    }
+
+    public void setAfcAlpha(float alpha)
+    {
+        mAfcAlpha = Math.max(0.001f, Math.min(0.1f, alpha));
+    }
+
+    /**
+     * Gets whether adaptive decision thresholds are enabled for C4FM V2.
+     * @return true if enabled (default: true)
+     */
+    @JacksonXmlProperty(isAttribute = true, localName = "adaptiveThresholds")
+    public boolean isAdaptiveThresholds()
+    {
+        return mAdaptiveThresholds;
+    }
+
+    public void setAdaptiveThresholds(boolean enabled)
+    {
+        mAdaptiveThresholds = enabled;
     }
 
     /**

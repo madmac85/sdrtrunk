@@ -274,6 +274,19 @@ public class DecodeQualityTest
                     public int getSyncBlockedCount() { return d.getMessageFramer().getSyncBlockedCount(); }
                 };
             }
+            case "C4FM_V2" ->
+            {
+                P25P1DecoderC4FMv2 d = new P25P1DecoderC4FMv2();
+                yield new DecoderWrapper()
+                {
+                    public void setMessageListener(Listener<IMessage> l) { d.setMessageListener(l); }
+                    public void start() { d.start(); }
+                    public void stop() { d.stop(); }
+                    public void setSampleRate(double r) { d.setSampleRate(r); }
+                    public void receive(ComplexSamples s) { d.receive(s); }
+                    public int getSyncBlockedCount() { return extractSyncBlockedReflection(d); }
+                };
+            }
             default ->
             {
                 P25P1DecoderC4FM d = new P25P1DecoderC4FM();

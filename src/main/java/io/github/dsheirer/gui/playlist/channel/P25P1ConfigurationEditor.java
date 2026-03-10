@@ -75,6 +75,7 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
     private Label mNACLabel;
     private SegmentedButton mModulationSegmentedButton;
     private ToggleButton mC4FMToggleButton;
+    private ToggleButton mC4FMv2ToggleButton;
     private ToggleButton mLSMToggleButton;
     private ToggleButton mLSMv2ToggleButton;
 
@@ -333,7 +334,7 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
         {
             mModulationSegmentedButton = new SegmentedButton();
             mModulationSegmentedButton.getStyleClass().add(SegmentedButton.STYLE_CLASS_DARK);
-            mModulationSegmentedButton.getButtons().addAll(getC4FMToggleButton(), getLSMToggleButton(), getLSMv2ToggleButton());
+            mModulationSegmentedButton.getButtons().addAll(getC4FMToggleButton(), getC4FMv2ToggleButton(), getLSMToggleButton(), getLSMv2ToggleButton());
             mModulationSegmentedButton.getToggleGroup().selectedToggleProperty().addListener(new ChangeListener<Toggle>()
             {
                 @Override
@@ -366,6 +367,16 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
         }
 
         return mC4FMToggleButton;
+    }
+
+    private ToggleButton getC4FMv2ToggleButton()
+    {
+        if(mC4FMv2ToggleButton == null)
+        {
+            mC4FMv2ToggleButton = new ToggleButton("C4FM v2");
+        }
+
+        return mC4FMv2ToggleButton;
     }
 
     private ToggleButton getLSMToggleButton()
@@ -687,12 +698,16 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
             getCmaGearShiftMsSpinner().getValueFactory().setValue(decodeConfig.getCmaGearShiftMs());
 
             getC4FMToggleButton().setSelected(false);
+            getC4FMv2ToggleButton().setSelected(false);
             getLSMToggleButton().setSelected(false);
             getLSMv2ToggleButton().setSelected(false);
             switch(decodeConfig.getModulation())
             {
                 case C4FM:
                     getC4FMToggleButton().setSelected(true);
+                    break;
+                case C4FM_V2:
+                    getC4FMv2ToggleButton().setSelected(true);
                     break;
                 case CQPSK_V2:
                     getLSMv2ToggleButton().setSelected(true);
@@ -746,6 +761,10 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
         if(getC4FMToggleButton().isSelected())
         {
             config.setModulation(Modulation.C4FM);
+        }
+        else if(getC4FMv2ToggleButton().isSelected())
+        {
+            config.setModulation(Modulation.C4FM_V2);
         }
         else if(getLSMv2ToggleButton().isSelected())
         {

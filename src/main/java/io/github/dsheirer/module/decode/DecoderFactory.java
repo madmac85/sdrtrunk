@@ -86,6 +86,7 @@ import io.github.dsheirer.module.decode.p25.audio.P25P1AudioModule;
 import io.github.dsheirer.module.decode.p25.audio.P25P2AudioModule;
 import io.github.dsheirer.module.decode.p25.phase1.DecodeConfigP25Phase1;
 import io.github.dsheirer.module.decode.p25.phase1.P25P1DecoderC4FM;
+import io.github.dsheirer.module.decode.p25.phase1.P25P1DecoderC4FMv2;
 import io.github.dsheirer.module.decode.p25.phase1.P25P1DecoderLSM;
 import io.github.dsheirer.module.decode.p25.phase1.P25P1DecoderLSMv2;
 import io.github.dsheirer.module.decode.p25.phase1.P25P1DecoderState;
@@ -279,6 +280,13 @@ public class DecoderFactory
             {
                 case C4FM:
                     modules.add(new P25P1DecoderC4FM());
+                    break;
+                case C4FM_V2:
+                    P25P1DecoderC4FMv2 c4fmv2Decoder = new P25P1DecoderC4FMv2();
+                    c4fmv2Decoder.setGardnerBandwidth(p1.getGardnerBandwidth());
+                    c4fmv2Decoder.setAfcAlpha(p1.getAfcAlpha());
+                    c4fmv2Decoder.setAdaptiveThresholdsEnabled(p1.isAdaptiveThresholds());
+                    modules.add(c4fmv2Decoder);
                     break;
                 case CQPSK:
                     modules.add(new P25P1DecoderLSM());
