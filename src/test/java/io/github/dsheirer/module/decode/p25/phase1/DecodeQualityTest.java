@@ -84,6 +84,9 @@ public class DecodeQualityTest
         int segmentGapMs = 500; // Default: segment on 500ms gaps
         float silenceThreshold = 0.01f; // RMS threshold for decode-failure silence
         int silenceMinMs = 100; // Minimum silence region duration in ms
+        float cmaAcqMu = 0.0f; // CMA acquisition mu (0 = system property fallback)
+        float cmaTrkMu = 0.0f; // CMA tracking mu (0 = system property fallback)
+        int cmaShiftMs = 0;    // CMA gear-shift timing in ms (0 = system property fallback)
 
         for(int i = 0; i < args.length; i++)
         {
@@ -102,6 +105,9 @@ public class DecodeQualityTest
                 case "--segment-gap" -> segmentGapMs = Integer.parseInt(args[++i]);
                 case "--silence-threshold" -> silenceThreshold = Float.parseFloat(args[++i]);
                 case "--silence-min-ms" -> silenceMinMs = Integer.parseInt(args[++i]);
+                case "--cma-acq-mu" -> cmaAcqMu = Float.parseFloat(args[++i]);
+                case "--cma-trk-mu" -> cmaTrkMu = Float.parseFloat(args[++i]);
+                case "--cma-shift-ms" -> cmaShiftMs = Integer.parseInt(args[++i]);
             }
         }
 
@@ -151,7 +157,7 @@ public class DecodeQualityTest
             System.out.printf("%n━━━ %s ━━━%n", bbFile.getName());
             System.out.printf("  Channel: %s | Mod: %s | NAC: %d | Tuner: %s%n", channelName, modulation, nac, tuner);
 
-            DecodeResult result = runDecode(bbFile, modulation, nac, diagEnabled, maxBchErrors);
+            DecodeResult result = runDecode(bbFile, modulation, nac, diagEnabled, maxBchErrors, cmaAcqMu, cmaTrkMu, cmaShiftMs);
 
             int audioSegments = 0;
             double audioSeconds = 0;
@@ -162,7 +168,7 @@ public class DecodeQualityTest
             {
                 Path audioDir = outPath.resolve(sanitize(bbFile.getName()));
                 try { Files.createDirectories(audioDir); } catch(IOException e) { /* ignore */ }
-                AudioResult ar = decodeAudio(bbFile, modulation, nac, codec, audioDir, maxBchErrors, maxImbeErrors, segmentGapMs, silenceThreshold, silenceMinMs);
+                AudioResult ar = decodeAudio(bbFile, modulation, nac, codec, audioDir, maxBchErrors, maxImbeErrors, segmentGapMs, silenceThreshold, silenceMinMs, cmaAcqMu, cmaTrkMu, cmaShiftMs);
                 audioSegments = ar.segmentCount;
                 audioSeconds = ar.totalSeconds;
                 silenceSeconds = ar.silenceSeconds;
@@ -235,7 +241,7 @@ public class DecodeQualityTest
         catch(IOException e) { System.err.println("ERROR writing metrics: " + e.getMessage()); }
     }
 
-    private static DecoderWrapper createDecoder(String modulation, int nac, int maxBchErrors)
+    private static DecoderWrapper createDecoder(String modulation, int nac, int maxBchErrors, float cmaAcqMu, float cmaTrkMu, int cmaShiftMs)
     {
         return switch(modulation.toUpperCase())
         {
@@ -257,6 +263,7 @@ public class DecodeQualityTest
                 P25P1DecoderLSMv2 d = new P25P1DecoderLSMv2();
                 if(nac > 0) d.setConfiguredNAC(nac);
                 if(maxBchErrors < 11) d.getMessageFramer().setMaxBchErrors(maxBchErrors);
+                if(cmaAcqMu > 0 || cmaTrkMu > 0 || cmaShiftMs > 0) d.setCMAConfig(cmaAcqMu, cmaTrkMu, cmaShiftMs);
                 yield new DecoderWrapper()
                 {
                     public void setMessageListener(Listener<IMessage> l) { d.setMessageListener(l); }
@@ -283,7 +290,7 @@ public class DecodeQualityTest
         };
     }
 
-    private static DecodeResult runDecode(File file, String modulation, int nac, boolean diagEnabled, int maxBchErrors)
+    private static DecodeResult runDecode(File file, String modulation, int nac, boolean diagEnabled, int maxBchErrors, float cmaAcqMu, float cmaTrkMu, int cmaShiftMs)
     {
         int[] ldu = {0}, valid = {0}, total = {0}, bitErr = {0}, syncLoss = {0};
         double[] signalSeconds = {0}, totalFileSeconds = {0};
@@ -349,7 +356,7 @@ public class DecodeQualityTest
             List<Float> bufferRmsValues = new ArrayList<>();
             List<Integer> bufferSizes = new ArrayList<>();
 
-            DecoderWrapper decoder = createDecoder(modulation, nac, maxBchErrors);
+            DecoderWrapper decoder = createDecoder(modulation, nac, maxBchErrors, cmaAcqMu, cmaTrkMu, cmaShiftMs);
             decoder.setMessageListener(listener);
             decoder.start();
             source.setListener(buf -> {
@@ -460,7 +467,7 @@ public class DecodeQualityTest
         return signalSamples / sampleRate;
     }
 
-    private static AudioResult decodeAudio(File file, String modulation, int nac, TestJmbeCodecLoader codec, Path audioDir, int maxBchErrors, int maxImbeErrors, int segmentGapMs, float silenceThreshold, int silenceMinMs)
+    private static AudioResult decodeAudio(File file, String modulation, int nac, TestJmbeCodecLoader codec, Path audioDir, int maxBchErrors, int maxImbeErrors, int segmentGapMs, float silenceThreshold, int silenceMinMs, float cmaAcqMu, float cmaTrkMu, int cmaShiftMs)
     {
         List<float[]> audioBuffers = new ArrayList<>();
         List<Long> lduTimestamps = new ArrayList<>();
@@ -550,7 +557,7 @@ public class DecodeQualityTest
 
         try(TestComplexWaveSource source = new TestComplexWaveSource(file))
         {
-            DecoderWrapper decoder = createDecoder(modulation, nac, maxBchErrors);
+            DecoderWrapper decoder = createDecoder(modulation, nac, maxBchErrors, cmaAcqMu, cmaTrkMu, cmaShiftMs);
             decoder.setMessageListener(listener);
             decoder.start();
             source.setListener(buf -> { var it = buf.iterator(); while(it.hasNext()) decoder.receive(it.next()); });
