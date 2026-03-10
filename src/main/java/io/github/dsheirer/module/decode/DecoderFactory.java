@@ -291,6 +291,9 @@ public class DecoderFactory
                         lsmv2Decoder.setConfiguredNAC(p1.getConfiguredNAC());
                         lsmv2Decoder.getMessageFramer().setMaxBchErrors(p1.getMaxBchErrors());
                     }
+                    // Apply per-channel CMA equalizer config (0 values = use system defaults)
+                    lsmv2Decoder.setCMAConfig(p1.getCmaAcquisitionMu(),
+                            p1.getCmaTrackingMu(), p1.getCmaGearShiftMs());
                     modules.add(lsmv2Decoder);
                     break;
                 default:

@@ -85,6 +85,12 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
     private Label mMaxImbeErrorsLabel;
     private Spinner<Integer> mMaxBchErrorsSpinner;
     private Label mMaxBchErrorsLabel;
+    private Spinner<Double> mCmaAcquisitionMuSpinner;
+    private Label mCmaAcquisitionMuLabel;
+    private Spinner<Double> mCmaTrackingMuSpinner;
+    private Label mCmaTrackingMuLabel;
+    private Spinner<Integer> mCmaGearShiftMsSpinner;
+    private Label mCmaGearShiftMsLabel;
 
     /**
      * Constructs an instance
@@ -165,7 +171,7 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
             GridPane.setConstraints(getNACSpinner(), 1, 1);
             gridPane.getChildren().add(getNACSpinner());
 
-            Label modulationHelpLabel = new Label("C4FM: repeaters and non-simulcast trunked.  LSM: simulcast trunked.  LSM v2: conventional (PTT) CQPSK channels.");
+            Label modulationHelpLabel = new Label("C4FM: repeaters and non-simulcast trunked.  C4FM v2: C4FM with equalizer for multipath.  LSM: simulcast trunked.  LSM v2: conventional (PTT) CQPSK channels.");
             GridPane.setConstraints(modulationHelpLabel, 0, 2, 6, 1);
             gridPane.getChildren().add(modulationHelpLabel);
 
@@ -202,6 +208,49 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
 
             GridPane.setConstraints(getMaxBchErrorsSpinner(), 1, 4);
             gridPane.getChildren().add(getMaxBchErrorsSpinner());
+
+            // CMA Acquisition Mu (row 5) - only visible for LSM v2
+            mCmaAcquisitionMuLabel = new Label("CMA Acq. Mu:");
+            mCmaAcquisitionMuLabel.setTooltip(new Tooltip(
+                "CMA equalizer acquisition step size.\n" +
+                "Controls how fast the equalizer converges after cold-start.\n" +
+                "0.000 = use system default\n" +
+                "0.003 = recommended for severe simulcast (LFD, WPD)\n" +
+                "0.001 = conservative (ROC W)"));
+            GridPane.setHalignment(mCmaAcquisitionMuLabel, HPos.RIGHT);
+            GridPane.setConstraints(mCmaAcquisitionMuLabel, 0, 5);
+            gridPane.getChildren().add(mCmaAcquisitionMuLabel);
+
+            GridPane.setConstraints(getCmaAcquisitionMuSpinner(), 1, 5);
+            gridPane.getChildren().add(getCmaAcquisitionMuSpinner());
+
+            // CMA Tracking Mu (row 6) - only visible for LSM v2
+            mCmaTrackingMuLabel = new Label("CMA Trk. Mu:");
+            mCmaTrackingMuLabel.setTooltip(new Tooltip(
+                "CMA equalizer tracking step size.\n" +
+                "Controls steady-state tracking accuracy after gear-shift.\n" +
+                "0.000 = use system default\n" +
+                "0.001 = recommended for all simulcast channels"));
+            GridPane.setHalignment(mCmaTrackingMuLabel, HPos.RIGHT);
+            GridPane.setConstraints(mCmaTrackingMuLabel, 0, 6);
+            gridPane.getChildren().add(mCmaTrackingMuLabel);
+
+            GridPane.setConstraints(getCmaTrackingMuSpinner(), 1, 6);
+            gridPane.getChildren().add(getCmaTrackingMuSpinner());
+
+            // CMA Gear Shift Ms (row 7) - only visible for LSM v2
+            mCmaGearShiftMsLabel = new Label("CMA Shift (ms):");
+            mCmaGearShiftMsLabel.setTooltip(new Tooltip(
+                "Time before equalizer switches from acquisition to tracking mu.\n" +
+                "0 = use system default (no gear-shifting)\n" +
+                "200 = recommended for simulcast channels\n" +
+                "Set all three CMA values to enable per-channel gear-shifting."));
+            GridPane.setHalignment(mCmaGearShiftMsLabel, HPos.RIGHT);
+            GridPane.setConstraints(mCmaGearShiftMsLabel, 0, 7);
+            gridPane.getChildren().add(mCmaGearShiftMsLabel);
+
+            GridPane.setConstraints(getCmaGearShiftMsSpinner(), 1, 7);
+            gridPane.getChildren().add(getCmaGearShiftMsSpinner());
 
             // Update visibility based on modulation selection
             updateLSMv2OptionsVisibility();
@@ -398,43 +447,71 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
      */
     private void updateLSMv2OptionsVisibility()
     {
-        boolean showV2Options = getLSMv2ToggleButton().isSelected();
+        boolean showLsmV2Options = getLSMv2ToggleButton().isSelected();
+        boolean showCmaOptions = showLsmV2Options;
 
-        // NAC spinner
+        // NAC spinner - LSM v2 only
         if(mNACLabel != null)
         {
-            mNACLabel.setVisible(showV2Options);
-            mNACLabel.setManaged(showV2Options);
+            mNACLabel.setVisible(showLsmV2Options);
+            mNACLabel.setManaged(showLsmV2Options);
         }
-        getNACSpinner().setVisible(showV2Options);
-        getNACSpinner().setManaged(showV2Options);
+        getNACSpinner().setVisible(showLsmV2Options);
+        getNACSpinner().setManaged(showLsmV2Options);
 
-        // Skip encryption switch
+        // Skip encryption switch - LSM v2 only
         if(mIgnoreEncryptionLabel != null)
         {
-            mIgnoreEncryptionLabel.setVisible(showV2Options);
-            mIgnoreEncryptionLabel.setManaged(showV2Options);
+            mIgnoreEncryptionLabel.setVisible(showLsmV2Options);
+            mIgnoreEncryptionLabel.setManaged(showLsmV2Options);
         }
-        getIgnoreEncryptionSwitch().setVisible(showV2Options);
-        getIgnoreEncryptionSwitch().setManaged(showV2Options);
+        getIgnoreEncryptionSwitch().setVisible(showLsmV2Options);
+        getIgnoreEncryptionSwitch().setManaged(showLsmV2Options);
 
-        // Max IMBE errors spinner
+        // Max IMBE errors spinner - LSM v2 only
         if(mMaxImbeErrorsLabel != null)
         {
-            mMaxImbeErrorsLabel.setVisible(showV2Options);
-            mMaxImbeErrorsLabel.setManaged(showV2Options);
+            mMaxImbeErrorsLabel.setVisible(showLsmV2Options);
+            mMaxImbeErrorsLabel.setManaged(showLsmV2Options);
         }
-        getMaxImbeErrorsSpinner().setVisible(showV2Options);
-        getMaxImbeErrorsSpinner().setManaged(showV2Options);
+        getMaxImbeErrorsSpinner().setVisible(showLsmV2Options);
+        getMaxImbeErrorsSpinner().setManaged(showLsmV2Options);
 
-        // BCH threshold spinner
+        // BCH threshold spinner - LSM v2 only
         if(mMaxBchErrorsLabel != null)
         {
-            mMaxBchErrorsLabel.setVisible(showV2Options);
-            mMaxBchErrorsLabel.setManaged(showV2Options);
+            mMaxBchErrorsLabel.setVisible(showLsmV2Options);
+            mMaxBchErrorsLabel.setManaged(showLsmV2Options);
         }
-        getMaxBchErrorsSpinner().setVisible(showV2Options);
-        getMaxBchErrorsSpinner().setManaged(showV2Options);
+        getMaxBchErrorsSpinner().setVisible(showLsmV2Options);
+        getMaxBchErrorsSpinner().setManaged(showLsmV2Options);
+
+        // CMA acquisition mu spinner - both LSM v2 and C4FM v2
+        if(mCmaAcquisitionMuLabel != null)
+        {
+            mCmaAcquisitionMuLabel.setVisible(showCmaOptions);
+            mCmaAcquisitionMuLabel.setManaged(showCmaOptions);
+        }
+        getCmaAcquisitionMuSpinner().setVisible(showCmaOptions);
+        getCmaAcquisitionMuSpinner().setManaged(showCmaOptions);
+
+        // CMA tracking mu spinner - both LSM v2 and C4FM v2
+        if(mCmaTrackingMuLabel != null)
+        {
+            mCmaTrackingMuLabel.setVisible(showCmaOptions);
+            mCmaTrackingMuLabel.setManaged(showCmaOptions);
+        }
+        getCmaTrackingMuSpinner().setVisible(showCmaOptions);
+        getCmaTrackingMuSpinner().setManaged(showCmaOptions);
+
+        // CMA gear shift ms spinner - both LSM v2 and C4FM v2
+        if(mCmaGearShiftMsLabel != null)
+        {
+            mCmaGearShiftMsLabel.setVisible(showCmaOptions);
+            mCmaGearShiftMsLabel.setManaged(showCmaOptions);
+        }
+        getCmaGearShiftMsSpinner().setVisible(showCmaOptions);
+        getCmaGearShiftMsSpinner().setManaged(showCmaOptions);
     }
 
     private ToggleSwitch getIgnoreEncryptionSwitch()
@@ -457,9 +534,11 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
             mMaxImbeErrorsSpinner.setDisable(true);
             mMaxImbeErrorsSpinner.setTooltip(new Tooltip(
                 "Pre-codec quality gate threshold.\n" +
-                "0 = disabled (default)\n" +
-                "3 = recommended for some simulcast channels\n" +
-                "Frames with more IMBE FEC errors than this are silenced."));
+                "0 = disabled (default, best for severe simulcast like LFD/WPD)\n" +
+                "3 = recommended for moderate simulcast (ROC W)\n" +
+                "Frames with more IMBE FEC errors than this are silenced.\n" +
+                "Severe simulcast channels may need 0 (disabled) since most\n" +
+                "frames arrive with high error counts."));
             mMaxImbeErrorsSpinner.getStyleClass().add(Spinner.STYLE_CLASS_SPLIT_ARROWS_HORIZONTAL);
             mMaxImbeErrorsSpinner.setPrefWidth(80);
             SpinnerValueFactory<Integer> svf = new SpinnerValueFactory.IntegerSpinnerValueFactory(
@@ -479,8 +558,9 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
             mMaxBchErrorsSpinner.setDisable(true);
             mMaxBchErrorsSpinner.setTooltip(new Tooltip(
                 "BCH error correction threshold for NAC-assisted NID decode.\n" +
-                "5 = recommended default (good for most simulcast)\n" +
-                "11 = accept all corrections (better for severe simulcast)\n" +
+                "5 = recommended for moderate simulcast (ROC W)\n" +
+                "11 = accept all corrections (recommended for severe simulcast\n" +
+                "     like LFD/WPD where heavy NID correction is needed)\n" +
                 "1-3 = strict (may miss valid frames)"));
             mMaxBchErrorsSpinner.getStyleClass().add(Spinner.STYLE_CLASS_SPLIT_ARROWS_HORIZONTAL);
             mMaxBchErrorsSpinner.setPrefWidth(80);
@@ -492,6 +572,70 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
                 .addListener((observable, oldValue, newValue) -> modifiedProperty().set(true));
         }
         return mMaxBchErrorsSpinner;
+    }
+
+    private Spinner<Double> getCmaAcquisitionMuSpinner()
+    {
+        if(mCmaAcquisitionMuSpinner == null)
+        {
+            mCmaAcquisitionMuSpinner = new Spinner<>();
+            mCmaAcquisitionMuSpinner.setDisable(true);
+            mCmaAcquisitionMuSpinner.setTooltip(new Tooltip(
+                "CMA equalizer acquisition step size.\n" +
+                "0.003 = default, fast convergence for simulcast\n" +
+                "0.001 = conservative\n" +
+                "0.000 = disable per-channel override (use system property)"));
+            mCmaAcquisitionMuSpinner.getStyleClass().add(Spinner.STYLE_CLASS_SPLIT_ARROWS_HORIZONTAL);
+            mCmaAcquisitionMuSpinner.setPrefWidth(80);
+            SpinnerValueFactory<Double> svf = new SpinnerValueFactory.DoubleSpinnerValueFactory(
+                0.000, 0.010, 0.003, 0.001);
+            mCmaAcquisitionMuSpinner.setValueFactory(svf);
+            mCmaAcquisitionMuSpinner.getValueFactory().valueProperty()
+                .addListener((observable, oldValue, newValue) -> modifiedProperty().set(true));
+        }
+        return mCmaAcquisitionMuSpinner;
+    }
+
+    private Spinner<Double> getCmaTrackingMuSpinner()
+    {
+        if(mCmaTrackingMuSpinner == null)
+        {
+            mCmaTrackingMuSpinner = new Spinner<>();
+            mCmaTrackingMuSpinner.setDisable(true);
+            mCmaTrackingMuSpinner.setTooltip(new Tooltip(
+                "CMA equalizer tracking step size.\n" +
+                "0.001 = default, stable tracking for simulcast\n" +
+                "0.000 = disable per-channel override (use system property)"));
+            mCmaTrackingMuSpinner.getStyleClass().add(Spinner.STYLE_CLASS_SPLIT_ARROWS_HORIZONTAL);
+            mCmaTrackingMuSpinner.setPrefWidth(80);
+            SpinnerValueFactory<Double> svf = new SpinnerValueFactory.DoubleSpinnerValueFactory(
+                0.000, 0.010, 0.001, 0.001);
+            mCmaTrackingMuSpinner.setValueFactory(svf);
+            mCmaTrackingMuSpinner.getValueFactory().valueProperty()
+                .addListener((observable, oldValue, newValue) -> modifiedProperty().set(true));
+        }
+        return mCmaTrackingMuSpinner;
+    }
+
+    private Spinner<Integer> getCmaGearShiftMsSpinner()
+    {
+        if(mCmaGearShiftMsSpinner == null)
+        {
+            mCmaGearShiftMsSpinner = new Spinner<>();
+            mCmaGearShiftMsSpinner.setDisable(true);
+            mCmaGearShiftMsSpinner.setTooltip(new Tooltip(
+                "CMA gear-shift timing in milliseconds.\n" +
+                "200 = default, switches from acq to tracking mu after 200ms\n" +
+                "0 = disable per-channel override (use system property)"));
+            mCmaGearShiftMsSpinner.getStyleClass().add(Spinner.STYLE_CLASS_SPLIT_ARROWS_HORIZONTAL);
+            mCmaGearShiftMsSpinner.setPrefWidth(80);
+            SpinnerValueFactory<Integer> svf = new SpinnerValueFactory.IntegerSpinnerValueFactory(
+                0, 1000, 200, 50);
+            mCmaGearShiftMsSpinner.setValueFactory(svf);
+            mCmaGearShiftMsSpinner.getValueFactory().valueProperty()
+                .addListener((observable, oldValue, newValue) -> modifiedProperty().set(true));
+        }
+        return mCmaGearShiftMsSpinner;
     }
 
     private RecordConfigurationEditor getRecordConfigurationEditor()
@@ -524,6 +668,9 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
         getIgnoreEncryptionSwitch().setDisable(!enabled);
         getMaxImbeErrorsSpinner().setDisable(!enabled);
         getMaxBchErrorsSpinner().setDisable(!enabled);
+        getCmaAcquisitionMuSpinner().setDisable(!enabled);
+        getCmaTrackingMuSpinner().setDisable(!enabled);
+        getCmaGearShiftMsSpinner().setDisable(!enabled);
 
         if(config instanceof DecodeConfigP25Phase1 decodeConfig)
         {
@@ -535,6 +682,9 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
             getIgnoreEncryptionSwitch().setSelected(decodeConfig.isIgnoreEncryptionState());
             getMaxImbeErrorsSpinner().getValueFactory().setValue(decodeConfig.getMaxImbeErrors());
             getMaxBchErrorsSpinner().getValueFactory().setValue(decodeConfig.getMaxBchErrors());
+            getCmaAcquisitionMuSpinner().getValueFactory().setValue((double)decodeConfig.getCmaAcquisitionMu());
+            getCmaTrackingMuSpinner().getValueFactory().setValue((double)decodeConfig.getCmaTrackingMu());
+            getCmaGearShiftMsSpinner().getValueFactory().setValue(decodeConfig.getCmaGearShiftMs());
 
             getC4FMToggleButton().setSelected(false);
             getLSMToggleButton().setSelected(false);
@@ -561,6 +711,9 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
             getIgnoreEncryptionSwitch().setSelected(false);
             getMaxImbeErrorsSpinner().getValueFactory().setValue(0);
             getMaxBchErrorsSpinner().getValueFactory().setValue(DecodeConfigP25Phase1.MAX_BCH_ERRORS_DEFAULT);
+            getCmaAcquisitionMuSpinner().getValueFactory().setValue(0.0);
+            getCmaTrackingMuSpinner().getValueFactory().setValue(0.0);
+            getCmaGearShiftMsSpinner().getValueFactory().setValue(0);
         }
     }
 
@@ -586,6 +739,9 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
         config.setIgnoreEncryptionState(getIgnoreEncryptionSwitch().isSelected());
         config.setMaxImbeErrors(getMaxImbeErrorsSpinner().getValue() != null ? getMaxImbeErrorsSpinner().getValue() : 0);
         config.setMaxBchErrors(getMaxBchErrorsSpinner().getValue() != null ? getMaxBchErrorsSpinner().getValue() : DecodeConfigP25Phase1.MAX_BCH_ERRORS_DEFAULT);
+        config.setCmaAcquisitionMu(getCmaAcquisitionMuSpinner().getValue() != null ? getCmaAcquisitionMuSpinner().getValue().floatValue() : 0.0f);
+        config.setCmaTrackingMu(getCmaTrackingMuSpinner().getValue() != null ? getCmaTrackingMuSpinner().getValue().floatValue() : 0.0f);
+        config.setCmaGearShiftMs(getCmaGearShiftMsSpinner().getValue() != null ? getCmaGearShiftMsSpinner().getValue() : 0);
 
         if(getC4FMToggleButton().isSelected())
         {

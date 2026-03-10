@@ -104,7 +104,6 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
         mDemodulator = new P25P1DemodulatorLSMv2(mMessageFramer, this);
         // Strategy 1: Provide energy state to message framer for adaptive sync threshold
         mMessageFramer.setEnergyProvider(this);
-
         // Configure gear-shifting if system properties are set
         // cma.acq.mu = acquisition mu (fast convergence after cold-start)
         // cma.trk.mu = tracking mu (low distortion during steady state)
@@ -458,6 +457,36 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
     public CMAEqualizer getEqualizer()
     {
         return mEqualizer;
+    }
+
+    /**
+     * Configures CMA equalizer parameters for this channel. Values of 0 mean "use system property
+     * fallback" (which is what the constructor already configured). Non-zero values override.
+     *
+     * @param acquisitionMu step size for initial convergence (0 = use system default, typical: 0.003)
+     * @param trackingMu step size for steady-state tracking (0 = use system default, typical: 0.001)
+     * @param gearShiftMs time before switching from acquisition to tracking (0 = use system default, typical: 200)
+     */
+    public void setCMAConfig(float acquisitionMu, float trackingMu, int gearShiftMs)
+    {
+        if(acquisitionMu > 0 && trackingMu > 0 && gearShiftMs > 0)
+        {
+            // Convert ms to samples at ~25kHz decimated rate
+            int shiftSamples = (int)(gearShiftMs * 25.0f);
+            mEqualizer.setGearShift(acquisitionMu, trackingMu, shiftSamples);
+        }
+        else if(acquisitionMu > 0 || trackingMu > 0)
+        {
+            // If only mu values set without gear-shift, use acquisition mu as fixed mu
+            if(acquisitionMu > 0)
+            {
+                mEqualizer.setMu(acquisitionMu);
+            }
+            else if(trackingMu > 0)
+            {
+                mEqualizer.setMu(trackingMu);
+            }
+        }
     }
 
     /**

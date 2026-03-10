@@ -43,7 +43,7 @@ public class CMAEqualizer
     private int mSampleCount = 0;
     private int mGearShiftSamples = 0;  // 0 = disabled (fixed mu)
 
-    // Tap coefficients stored as interleaved I/Q pairs: [tap0_I, tap0_Q, tap1_I, tap1_Q, ...]
+    // Tap coefficients
     private final float[] mTapsI = new float[TAP_COUNT];
     private final float[] mTapsQ = new float[TAP_COUNT];
 

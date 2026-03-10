@@ -675,6 +675,21 @@ tasks.register('runDecodeScore', JavaExec) {
     if(project.hasProperty('segmentGap')) {
         argsList.addAll(['--segment-gap', project.property('segmentGap')])
     }
+    if(project.hasProperty('silenceThreshold')) {
+        argsList.addAll(['--silence-threshold', project.property('silenceThreshold')])
+    }
+    if(project.hasProperty('silenceMinMs')) {
+        argsList.addAll(['--silence-min-ms', project.property('silenceMinMs')])
+    }
+    if(project.hasProperty('cmaAcqMu')) {
+        argsList.addAll(['--cma-acq-mu', project.property('cmaAcqMu')])
+    }
+    if(project.hasProperty('cmaTrkMu')) {
+        argsList.addAll(['--cma-trk-mu', project.property('cmaTrkMu')])
+    }
+    if(project.hasProperty('cmaShiftMs')) {
+        argsList.addAll(['--cma-shift-ms', project.property('cmaShiftMs')])
+    }
     if(project.hasProperty('sysprop')) {
         project.property('sysprop').split(',').each { prop ->
             jvmArgs += "-D${prop}"

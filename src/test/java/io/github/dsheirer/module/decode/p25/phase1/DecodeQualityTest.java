@@ -60,7 +60,7 @@ public class DecodeQualityTest
     record DecodeResult(int lduCount, int validMessages, int totalMessages, int syncBlockedCount, int bitErrors, int syncLosses, double signalSeconds, double totalFileSeconds, IMBEDiagSummary diagSummary) {}
     record IMBEDiagSummary(int totalFrames, int totalErrors, int uncorrectableFrames, int invalidFundamentals,
                            double avgErrorsPerFrame, int maxFrameErrors, int[] errorDistribution) {}
-    record AudioResult(int segmentCount, double totalSeconds) {}
+    record AudioResult(int segmentCount, double totalSeconds, double silenceSeconds, double silencePercentage, int silenceRegionCount) {}
 
     /** Wraps any P25P1 decoder to provide a uniform interface. */
     interface DecoderWrapper
@@ -82,6 +82,11 @@ public class DecodeQualityTest
         int maxBchErrors = 11; // Default: no filtering
         int maxImbeErrors = -1; // Default: no quality gate (-1 = disabled)
         int segmentGapMs = 500; // Default: segment on 500ms gaps
+        float silenceThreshold = 0.01f; // RMS threshold for decode-failure silence
+        int silenceMinMs = 100; // Minimum silence region duration in ms
+        float cmaAcqMu = 0.0f; // CMA acquisition mu (0 = system property fallback)
+        float cmaTrkMu = 0.0f; // CMA tracking mu (0 = system property fallback)
+        int cmaShiftMs = 0;    // CMA gear-shift timing in ms (0 = system property fallback)
 
         for(int i = 0; i < args.length; i++)
         {
@@ -98,6 +103,11 @@ public class DecodeQualityTest
                 case "--max-bch-errors" -> maxBchErrors = Integer.parseInt(args[++i]);
                 case "--max-imbe-errors" -> maxImbeErrors = Integer.parseInt(args[++i]);
                 case "--segment-gap" -> segmentGapMs = Integer.parseInt(args[++i]);
+                case "--silence-threshold" -> silenceThreshold = Float.parseFloat(args[++i]);
+                case "--silence-min-ms" -> silenceMinMs = Integer.parseInt(args[++i]);
+                case "--cma-acq-mu" -> cmaAcqMu = Float.parseFloat(args[++i]);
+                case "--cma-trk-mu" -> cmaTrkMu = Float.parseFloat(args[++i]);
+                case "--cma-shift-ms" -> cmaShiftMs = Integer.parseInt(args[++i]);
             }
         }
 
@@ -147,19 +157,27 @@ public class DecodeQualityTest
             System.out.printf("%n━━━ %s ━━━%n", bbFile.getName());
             System.out.printf("  Channel: %s | Mod: %s | NAC: %d | Tuner: %s%n", channelName, modulation, nac, tuner);
 
-            DecodeResult result = runDecode(bbFile, modulation, nac, diagEnabled, maxBchErrors);
+            DecodeResult result = runDecode(bbFile, modulation, nac, diagEnabled, maxBchErrors, cmaAcqMu, cmaTrkMu, cmaShiftMs);
 
             int audioSegments = 0;
             double audioSeconds = 0;
+            double silenceSeconds = 0;
+            double silencePercentage = 0;
+            int silenceRegionCount = 0;
             if(fullMode && codec != null)
             {
                 Path audioDir = outPath.resolve(sanitize(bbFile.getName()));
                 try { Files.createDirectories(audioDir); } catch(IOException e) { /* ignore */ }
-                AudioResult ar = decodeAudio(bbFile, modulation, nac, codec, audioDir, maxBchErrors, maxImbeErrors, segmentGapMs);
+                AudioResult ar = decodeAudio(bbFile, modulation, nac, codec, audioDir, maxBchErrors, maxImbeErrors, segmentGapMs, silenceThreshold, silenceMinMs, cmaAcqMu, cmaTrkMu, cmaShiftMs);
                 audioSegments = ar.segmentCount;
                 audioSeconds = ar.totalSeconds;
+                silenceSeconds = ar.silenceSeconds;
+                silencePercentage = ar.silencePercentage;
+                silenceRegionCount = ar.silenceRegionCount;
                 System.out.printf("  Audio: %.1fs in %d segments (avg %.1fs)%n",
                     audioSeconds, audioSegments, audioSegments > 0 ? audioSeconds / audioSegments : 0);
+                System.out.printf("  Silence: %.1fs (%.1f%%) in %d regions%n",
+                    silenceSeconds, silencePercentage, silenceRegionCount);
             }
 
             double decodeSeconds = result.lduCount * 0.18; // ~180ms per LDU
@@ -202,11 +220,13 @@ public class DecodeQualityTest
                 "\"modulation\": \"%s\", \"nac\": %d, \"tuner\": \"%s\", \"is_fd\": %s, " +
                 "\"ldu_count\": %d, \"valid_messages\": %d, \"total_messages\": %d, \"sync_blocked\": %d, " +
                 "\"bit_errors\": %d, \"sync_losses\": %d, \"audio_seconds\": %.2f, \"audio_segments\": %d, " +
+                "\"silence_seconds\": %.2f, \"silence_percentage\": %.2f, \"silence_region_count\": %d, " +
                 "\"signal_seconds\": %.2f, \"total_file_seconds\": %.2f, \"decode_ratio\": %.2f%s}",
                 escapeJson(bbFile.getName()), escapeJson(channelName), escapeJson(system), escapeJson(site),
                 modulation, nac, escapeJson(tuner), isFD,
                 result.lduCount, result.validMessages, result.totalMessages, result.syncBlockedCount,
                 result.bitErrors, result.syncLosses, audioSeconds, audioSegments,
+                silenceSeconds, silencePercentage, silenceRegionCount,
                 result.signalSeconds, result.totalFileSeconds, decodeRatio, diagJson));
         }
 
@@ -221,7 +241,7 @@ public class DecodeQualityTest
         catch(IOException e) { System.err.println("ERROR writing metrics: " + e.getMessage()); }
     }
 
-    private static DecoderWrapper createDecoder(String modulation, int nac, int maxBchErrors)
+    private static DecoderWrapper createDecoder(String modulation, int nac, int maxBchErrors, float cmaAcqMu, float cmaTrkMu, int cmaShiftMs)
     {
         return switch(modulation.toUpperCase())
         {
@@ -243,6 +263,7 @@ public class DecodeQualityTest
                 P25P1DecoderLSMv2 d = new P25P1DecoderLSMv2();
                 if(nac > 0) d.setConfiguredNAC(nac);
                 if(maxBchErrors < 11) d.getMessageFramer().setMaxBchErrors(maxBchErrors);
+                if(cmaAcqMu > 0 || cmaTrkMu > 0 || cmaShiftMs > 0) d.setCMAConfig(cmaAcqMu, cmaTrkMu, cmaShiftMs);
                 yield new DecoderWrapper()
                 {
                     public void setMessageListener(Listener<IMessage> l) { d.setMessageListener(l); }
@@ -269,7 +290,7 @@ public class DecodeQualityTest
         };
     }
 
-    private static DecodeResult runDecode(File file, String modulation, int nac, boolean diagEnabled, int maxBchErrors)
+    private static DecodeResult runDecode(File file, String modulation, int nac, boolean diagEnabled, int maxBchErrors, float cmaAcqMu, float cmaTrkMu, int cmaShiftMs)
     {
         int[] ldu = {0}, valid = {0}, total = {0}, bitErr = {0}, syncLoss = {0};
         double[] signalSeconds = {0}, totalFileSeconds = {0};
@@ -335,7 +356,7 @@ public class DecodeQualityTest
             List<Float> bufferRmsValues = new ArrayList<>();
             List<Integer> bufferSizes = new ArrayList<>();
 
-            DecoderWrapper decoder = createDecoder(modulation, nac, maxBchErrors);
+            DecoderWrapper decoder = createDecoder(modulation, nac, maxBchErrors, cmaAcqMu, cmaTrkMu, cmaShiftMs);
             decoder.setMessageListener(listener);
             decoder.start();
             source.setListener(buf -> {
@@ -446,7 +467,7 @@ public class DecodeQualityTest
         return signalSamples / sampleRate;
     }
 
-    private static AudioResult decodeAudio(File file, String modulation, int nac, TestJmbeCodecLoader codec, Path audioDir, int maxBchErrors, int maxImbeErrors, int segmentGapMs)
+    private static AudioResult decodeAudio(File file, String modulation, int nac, TestJmbeCodecLoader codec, Path audioDir, int maxBchErrors, int maxImbeErrors, int segmentGapMs, float silenceThreshold, int silenceMinMs, float cmaAcqMu, float cmaTrkMu, int cmaShiftMs)
     {
         List<float[]> audioBuffers = new ArrayList<>();
         List<Long> lduTimestamps = new ArrayList<>();
@@ -536,7 +557,7 @@ public class DecodeQualityTest
 
         try(TestComplexWaveSource source = new TestComplexWaveSource(file))
         {
-            DecoderWrapper decoder = createDecoder(modulation, nac, maxBchErrors);
+            DecoderWrapper decoder = createDecoder(modulation, nac, maxBchErrors, cmaAcqMu, cmaTrkMu, cmaShiftMs);
             decoder.setMessageListener(listener);
             decoder.start();
             source.setListener(buf -> { var it = buf.iterator(); while(it.hasNext()) decoder.receive(it.next()); });
@@ -546,7 +567,47 @@ public class DecodeQualityTest
         }
         catch(Exception e) { System.err.println("  AUDIO ERROR: " + e.getMessage()); }
 
-        if(audioBuffers.isEmpty()) return new AudioResult(0, 0);
+        if(audioBuffers.isEmpty()) return new AudioResult(0, 0, 0, 0, 0);
+
+        // Silence detection: scan audio frames for decode-failure silence
+        int minSilenceFrames = Math.max(1, silenceMinMs / 20); // 20ms per IMBE frame
+        int consecutiveSilent = 0;
+        int totalSilentFrames = 0;
+        int silRegionCount = 0;
+
+        for(float[] frame : audioBuffers)
+        {
+            float sumSq = 0;
+            for(float sample : frame)
+            {
+                sumSq += sample * sample;
+            }
+            float rms = (float)Math.sqrt(sumSq / frame.length);
+
+            if(rms < silenceThreshold)
+            {
+                consecutiveSilent++;
+            }
+            else
+            {
+                if(consecutiveSilent >= minSilenceFrames)
+                {
+                    totalSilentFrames += consecutiveSilent;
+                    silRegionCount++;
+                }
+                consecutiveSilent = 0;
+            }
+        }
+        // Handle trailing silence region
+        if(consecutiveSilent >= minSilenceFrames)
+        {
+            totalSilentFrames += consecutiveSilent;
+            silRegionCount++;
+        }
+
+        double totalAudioSec = audioBuffers.size() * 160.0 / 8000.0;
+        double silSec = totalSilentFrames * 160.0 / 8000.0;
+        double silPct = totalAudioSec > 0 ? (silSec / totalAudioSec) * 100.0 : 0;
 
         // Segment by LDU gaps exceeding the configured threshold
         List<List<float[]>> segments = new ArrayList<>();
@@ -575,7 +636,7 @@ public class DecodeQualityTest
             writeMP3(segments.get(s), audioDir.resolve(String.format("segment_%03d.mp3", s + 1)));
         }
 
-        return new AudioResult(segments.size(), totalSeconds);
+        return new AudioResult(segments.size(), totalSeconds, silSec, silPct, silRegionCount);
     }
 
     private static void writeMP3(List<float[]> audioBuffers, Path mp3File)

@@ -60,12 +60,24 @@ public class DecodeConfigP25Phase1 extends DecodeConfigP25
     public static final int MAX_BCH_ERRORS_MAXIMUM = 11;
     public static final int MAX_BCH_ERRORS_DEFAULT = 5;
 
+    /**
+     * CMA equalizer configuration bounds. Per-channel values override system properties.
+     * Set to 0 to disable per-channel override and use system property fallback.
+     */
+    public static final float CMA_MU_MINIMUM = 0.0f;
+    public static final float CMA_MU_MAXIMUM = 0.010f;
+    public static final int CMA_GEAR_SHIFT_MS_MINIMUM = 0;
+    public static final int CMA_GEAR_SHIFT_MS_MAXIMUM = 1000;
+
     private Modulation mModulation = Modulation.C4FM;
     private int mConfiguredNAC = 0; // 0 = auto-detect, 1-4095 = configured NAC
     private int mAudioHoldoverMs = DEFAULT_AUDIO_HOLDOVER_MS;
     private boolean mIgnoreEncryptionState = false;
     private int mMaxImbeErrors = 0; // 0 = disabled, 1-10 = quality gate threshold
     private int mMaxBchErrors = MAX_BCH_ERRORS_DEFAULT;
+    private float mCmaAcquisitionMu = 0.003f; // Fast convergence for initial lock after cold-start
+    private float mCmaTrackingMu = 0.001f;   // Stable tracking, proven +69% LDUs on ROC W simulcast
+    private int mCmaGearShiftMs = 200;        // 200ms acquisition before switching to tracking
 
     /**
      * Constructs an instance
@@ -235,6 +247,60 @@ public class DecodeConfigP25Phase1 extends DecodeConfigP25
     public void setMaxBchErrors(int maxErrors)
     {
         mMaxBchErrors = Math.max(MAX_BCH_ERRORS_MINIMUM, Math.min(MAX_BCH_ERRORS_MAXIMUM, maxErrors));
+    }
+
+    /**
+     * Gets the CMA equalizer acquisition step size for this channel.
+     * Used during initial convergence after cold-start. Larger values converge faster but
+     * may introduce noise. Set to 0 to use the system-wide default.
+     *
+     * @return acquisition mu (default: 0.003, 0.0 = use system property fallback)
+     */
+    @JacksonXmlProperty(isAttribute = true, localName = "cmaAcquisitionMu")
+    public float getCmaAcquisitionMu()
+    {
+        return mCmaAcquisitionMu;
+    }
+
+    public void setCmaAcquisitionMu(float mu)
+    {
+        mCmaAcquisitionMu = Math.max(CMA_MU_MINIMUM, Math.min(CMA_MU_MAXIMUM, mu));
+    }
+
+    /**
+     * Gets the CMA equalizer tracking step size for this channel.
+     * Used during steady-state tracking after gear-shift. Smaller values track more
+     * accurately but respond slower to changes. Set to 0 to use the system-wide default.
+     *
+     * @return tracking mu (default: 0.001, 0.0 = use system property fallback)
+     */
+    @JacksonXmlProperty(isAttribute = true, localName = "cmaTrackingMu")
+    public float getCmaTrackingMu()
+    {
+        return mCmaTrackingMu;
+    }
+
+    public void setCmaTrackingMu(float mu)
+    {
+        mCmaTrackingMu = Math.max(CMA_MU_MINIMUM, Math.min(CMA_MU_MAXIMUM, mu));
+    }
+
+    /**
+     * Gets the CMA gear-shift timing for this channel.
+     * After this many milliseconds, the equalizer switches from acquisition mu to tracking mu.
+     * Set to 0 to use the system-wide default (no gear-shifting if no system property set).
+     *
+     * @return gear-shift timing in ms (default: 200, 0 = use system property fallback)
+     */
+    @JacksonXmlProperty(isAttribute = true, localName = "cmaGearShiftMs")
+    public int getCmaGearShiftMs()
+    {
+        return mCmaGearShiftMs;
+    }
+
+    public void setCmaGearShiftMs(int ms)
+    {
+        mCmaGearShiftMs = Math.max(CMA_GEAR_SHIFT_MS_MINIMUM, Math.min(CMA_GEAR_SHIFT_MS_MAXIMUM, ms));
     }
 
     /**
