@@ -582,13 +582,13 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
             mCmaAcquisitionMuSpinner.setDisable(true);
             mCmaAcquisitionMuSpinner.setTooltip(new Tooltip(
                 "CMA equalizer acquisition step size.\n" +
-                "0.000 = use system default\n" +
-                "0.003 = recommended for severe simulcast (LFD, WPD)\n" +
-                "0.001 = conservative (ROC W)"));
+                "0.003 = default, fast convergence for simulcast\n" +
+                "0.001 = conservative\n" +
+                "0.000 = disable per-channel override (use system property)"));
             mCmaAcquisitionMuSpinner.getStyleClass().add(Spinner.STYLE_CLASS_SPLIT_ARROWS_HORIZONTAL);
             mCmaAcquisitionMuSpinner.setPrefWidth(80);
             SpinnerValueFactory<Double> svf = new SpinnerValueFactory.DoubleSpinnerValueFactory(
-                0.000, 0.010, 0.000, 0.001);
+                0.000, 0.010, 0.003, 0.001);
             mCmaAcquisitionMuSpinner.setValueFactory(svf);
             mCmaAcquisitionMuSpinner.getValueFactory().valueProperty()
                 .addListener((observable, oldValue, newValue) -> modifiedProperty().set(true));
@@ -604,12 +604,12 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
             mCmaTrackingMuSpinner.setDisable(true);
             mCmaTrackingMuSpinner.setTooltip(new Tooltip(
                 "CMA equalizer tracking step size.\n" +
-                "0.000 = use system default\n" +
-                "0.001 = recommended for all simulcast channels"));
+                "0.001 = default, stable tracking for simulcast\n" +
+                "0.000 = disable per-channel override (use system property)"));
             mCmaTrackingMuSpinner.getStyleClass().add(Spinner.STYLE_CLASS_SPLIT_ARROWS_HORIZONTAL);
             mCmaTrackingMuSpinner.setPrefWidth(80);
             SpinnerValueFactory<Double> svf = new SpinnerValueFactory.DoubleSpinnerValueFactory(
-                0.000, 0.010, 0.000, 0.001);
+                0.000, 0.010, 0.001, 0.001);
             mCmaTrackingMuSpinner.setValueFactory(svf);
             mCmaTrackingMuSpinner.getValueFactory().valueProperty()
                 .addListener((observable, oldValue, newValue) -> modifiedProperty().set(true));
@@ -625,13 +625,12 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
             mCmaGearShiftMsSpinner.setDisable(true);
             mCmaGearShiftMsSpinner.setTooltip(new Tooltip(
                 "CMA gear-shift timing in milliseconds.\n" +
-                "0 = use system default (no gear-shifting)\n" +
-                "200 = recommended for simulcast channels\n" +
-                "Set all three CMA values to enable per-channel gear-shifting."));
+                "200 = default, switches from acq to tracking mu after 200ms\n" +
+                "0 = disable per-channel override (use system property)"));
             mCmaGearShiftMsSpinner.getStyleClass().add(Spinner.STYLE_CLASS_SPLIT_ARROWS_HORIZONTAL);
             mCmaGearShiftMsSpinner.setPrefWidth(80);
             SpinnerValueFactory<Integer> svf = new SpinnerValueFactory.IntegerSpinnerValueFactory(
-                0, 1000, 0, 50);
+                0, 1000, 200, 50);
             mCmaGearShiftMsSpinner.setValueFactory(svf);
             mCmaGearShiftMsSpinner.getValueFactory().valueProperty()
                 .addListener((observable, oldValue, newValue) -> modifiedProperty().set(true));

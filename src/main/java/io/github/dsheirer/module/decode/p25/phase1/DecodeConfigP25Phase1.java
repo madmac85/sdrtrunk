@@ -61,7 +61,8 @@ public class DecodeConfigP25Phase1 extends DecodeConfigP25
     public static final int MAX_BCH_ERRORS_DEFAULT = 5;
 
     /**
-     * CMA equalizer configuration defaults. Value 0 means "use system property fallback".
+     * CMA equalizer configuration bounds. Per-channel values override system properties.
+     * Set to 0 to disable per-channel override and use system property fallback.
      */
     public static final float CMA_MU_MINIMUM = 0.0f;
     public static final float CMA_MU_MAXIMUM = 0.010f;
@@ -74,9 +75,9 @@ public class DecodeConfigP25Phase1 extends DecodeConfigP25
     private boolean mIgnoreEncryptionState = false;
     private int mMaxImbeErrors = 0; // 0 = disabled, 1-10 = quality gate threshold
     private int mMaxBchErrors = MAX_BCH_ERRORS_DEFAULT;
-    private float mCmaAcquisitionMu = 0.0f; // 0 = use system property fallback
-    private float mCmaTrackingMu = 0.0f;    // 0 = use system property fallback
-    private int mCmaGearShiftMs = 0;         // 0 = use system property fallback
+    private float mCmaAcquisitionMu = 0.003f; // Fast convergence for initial lock after cold-start
+    private float mCmaTrackingMu = 0.001f;   // Stable tracking, proven +69% LDUs on ROC W simulcast
+    private int mCmaGearShiftMs = 200;        // 200ms acquisition before switching to tracking
 
     /**
      * Constructs an instance
@@ -253,7 +254,7 @@ public class DecodeConfigP25Phase1 extends DecodeConfigP25
      * Used during initial convergence after cold-start. Larger values converge faster but
      * may introduce noise. Set to 0 to use the system-wide default.
      *
-     * @return acquisition mu (0.0 = system default, typical: 0.003 for severe simulcast)
+     * @return acquisition mu (default: 0.003, 0.0 = use system property fallback)
      */
     @JacksonXmlProperty(isAttribute = true, localName = "cmaAcquisitionMu")
     public float getCmaAcquisitionMu()
@@ -271,7 +272,7 @@ public class DecodeConfigP25Phase1 extends DecodeConfigP25
      * Used during steady-state tracking after gear-shift. Smaller values track more
      * accurately but respond slower to changes. Set to 0 to use the system-wide default.
      *
-     * @return tracking mu (0.0 = system default, typical: 0.001 for simulcast)
+     * @return tracking mu (default: 0.001, 0.0 = use system property fallback)
      */
     @JacksonXmlProperty(isAttribute = true, localName = "cmaTrackingMu")
     public float getCmaTrackingMu()
@@ -289,7 +290,7 @@ public class DecodeConfigP25Phase1 extends DecodeConfigP25
      * After this many milliseconds, the equalizer switches from acquisition mu to tracking mu.
      * Set to 0 to use the system-wide default (no gear-shifting if no system property set).
      *
-     * @return gear-shift timing in ms (0 = system default, typical: 200 for simulcast)
+     * @return gear-shift timing in ms (default: 200, 0 = use system property fallback)
      */
     @JacksonXmlProperty(isAttribute = true, localName = "cmaGearShiftMs")
     public int getCmaGearShiftMs()
