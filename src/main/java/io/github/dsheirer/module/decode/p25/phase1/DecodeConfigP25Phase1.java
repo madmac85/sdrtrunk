@@ -83,6 +83,8 @@ public class DecodeConfigP25Phase1 extends DecodeConfigP25
     private float mGardnerBandwidth = 0.01f;
     private float mAfcAlpha = 0.01f;
     private boolean mAdaptiveThresholds = false;
+    private boolean mDfeEnabled = false;
+    private float mDfeMu = 0.005f;
 
     /**
      * Constructs an instance
@@ -351,6 +353,28 @@ public class DecodeConfigP25Phase1 extends DecodeConfigP25
     public void setAdaptiveThresholds(boolean enabled)
     {
         mAdaptiveThresholds = enabled;
+    }
+
+    @JacksonXmlProperty(isAttribute = true, localName = "dfeEnabled")
+    public boolean isDfeEnabled()
+    {
+        return mDfeEnabled;
+    }
+
+    public void setDfeEnabled(boolean enabled)
+    {
+        mDfeEnabled = enabled;
+    }
+
+    @JacksonXmlProperty(isAttribute = true, localName = "dfeMu")
+    public float getDfeMu()
+    {
+        return mDfeMu;
+    }
+
+    public void setDfeMu(float mu)
+    {
+        mDfeMu = Math.max(0.0001f, Math.min(0.05f, mu));
     }
 
     /**

@@ -138,6 +138,16 @@ public class P25P1DecoderC4FMv2 extends FeedbackDecoder implements IByteBufferPr
         mSymbolProcessor.setAdaptiveThresholdsEnabled(enabled);
     }
 
+    public void setDfeEnabled(boolean enabled)
+    {
+        mSymbolProcessor.setDfeEnabled(enabled);
+    }
+
+    public void setDfeMu(float mu)
+    {
+        mSymbolProcessor.setDfeMu(mu);
+    }
+
     /**
      * Sets the sample rate and configures internal decoder components.
      * @param sampleRate of the channel to decode

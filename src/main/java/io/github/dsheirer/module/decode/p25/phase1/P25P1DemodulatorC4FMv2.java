@@ -116,6 +116,15 @@ public class P25P1DemodulatorC4FMv2
     private static final float AMPLITUDE_MIN = 0.5f;
     private static final float AMPLITUDE_MAX = 1.5f;
 
+    // Post-demod Decision-Feedback Equalizer (DFE) state
+    private boolean mDfeEnabled = false;
+    private float mDfeMu = 0.005f;               // LMS step size
+    private float mDfeForwardTap = 1.0f;          // Forward tap (gain, initialized to passthrough)
+    private float mDfeFeedbackTap1 = 0.0f;        // ISI cancellation from symbol n-1
+    private float mDfeFeedbackTap2 = 0.0f;        // ISI cancellation from symbol n-2
+    private float mDfePastDecision1 = 0.0f;        // Previous decided ideal phase
+    private float mDfePastDecision2 = 0.0f;        // Two symbols ago decided ideal phase
+
     /**
      * Constructs an instance
      * @param messageFramer to receive symbol decisions (dibits) and sync notifications.
@@ -157,6 +166,23 @@ public class P25P1DemodulatorC4FMv2
     }
 
     /**
+     * Enables or disables the post-demod decision-feedback equalizer.
+     */
+    public void setDfeEnabled(boolean enabled)
+    {
+        mDfeEnabled = enabled;
+    }
+
+    /**
+     * Sets the DFE LMS step size.
+     * @param mu step size (0.0001-0.05, typical 0.005)
+     */
+    public void setDfeMu(float mu)
+    {
+        mDfeMu = Math.max(0.0001f, Math.min(0.05f, mu));
+    }
+
+    /**
      * Resets the PLL
      */
     public void resetPLL()
@@ -165,6 +191,11 @@ public class P25P1DemodulatorC4FMv2
         mAfcOffset = 0.0f;
         mGardnerW = 0.0;
         mAmplitudeEstimate = 1.0f;
+        mDfeForwardTap = 1.0f;
+        mDfeFeedbackTap1 = 0.0f;
+        mDfeFeedbackTap2 = 0.0f;
+        mDfePastDecision1 = 0.0f;
+        mDfePastDecision2 = 0.0f;
     }
 
     /**
@@ -231,18 +262,44 @@ public class P25P1DemodulatorC4FMv2
                         softSymbol -= mAfcOffset;
                     }
 
+                    // V2: DFE operates on a separate copy — raw softSymbol used for sync/Gardner
+                    float decisionSymbol = softSymbol;
+                    if(mDfeEnabled)
+                    {
+                        decisionSymbol = mDfeForwardTap * softSymbol
+                            - mDfeFeedbackTap1 * mDfePastDecision1
+                            - mDfeFeedbackTap2 * mDfePastDecision2;
+                    }
+
                     //Broadcast the decoded soft symbol to an optionally registered listener (ie Symbol view in channel panel).
                     mFeedbackDecoder.broadcast(softSymbol);
 
-                    // V2: Use adaptive thresholds if enabled, otherwise fixed
-                    Dibit symbol = mAdaptiveThresholdsEnabled ? toSymbolAdaptive(softSymbol) : toSymbol(softSymbol);
+                    // V2: Use DFE-corrected symbol for dibit decision
+                    Dibit symbol = mAdaptiveThresholdsEnabled ? toSymbolAdaptive(decisionSymbol) : toSymbol(decisionSymbol);
 
-                    // V2: Update AFC with symbol decision error
+                    // V2: Update AFC with raw symbol error (not DFE-corrected)
                     if(mAfcEnabled && fineSync)
                     {
                         float afcError = softSymbol - symbol.getIdealPhase();
                         mAfcOffset += mAfcAlpha * afcError;
                         mAfcOffset = Math.max(-AFC_MAX_OFFSET, Math.min(AFC_MAX_OFFSET, mAfcOffset));
+                    }
+
+                    // V2: DFE tap update using DFE output error
+                    if(mDfeEnabled && fineSync)
+                    {
+                        float dfeError = decisionSymbol - symbol.getIdealPhase();
+                        mDfeForwardTap -= mDfeMu * dfeError * softSymbol;
+                        mDfeFeedbackTap1 += mDfeMu * dfeError * mDfePastDecision1;
+                        mDfeFeedbackTap2 += mDfeMu * dfeError * mDfePastDecision2;
+                        mDfeForwardTap = Math.max(0.5f, Math.min(1.5f, mDfeForwardTap));
+                    }
+
+                    // V2: Shift DFE decision history
+                    if(mDfeEnabled)
+                    {
+                        mDfePastDecision2 = mDfePastDecision1;
+                        mDfePastDecision1 = symbol.getIdealPhase();
                     }
 
                     // V2: Gardner TED for continuous timing recovery (fine sync only)

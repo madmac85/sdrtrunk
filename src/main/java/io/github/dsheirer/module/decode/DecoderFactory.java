@@ -286,6 +286,8 @@ public class DecoderFactory
                     c4fmv2Decoder.setGardnerBandwidth(p1.getGardnerBandwidth());
                     c4fmv2Decoder.setAfcAlpha(p1.getAfcAlpha());
                     c4fmv2Decoder.setAdaptiveThresholdsEnabled(p1.isAdaptiveThresholds());
+                    c4fmv2Decoder.setDfeEnabled(p1.isDfeEnabled());
+                    c4fmv2Decoder.setDfeMu(p1.getDfeMu());
                     modules.add(c4fmv2Decoder);
                     break;
                 case CQPSK:
