@@ -108,7 +108,7 @@ public class P25P1DemodulatorC4FMv2
     private float mAfcOffset = 0.0f;
     private float mAfcAlpha = 0.01f;
     private static final float AFC_MAX_OFFSET = (float)(Math.PI / 8.0); // +/- 300 Hz at 4800 baud
-    private boolean mAfcEnabled = true;
+    private boolean mAfcEnabled = false;
 
     // Adaptive threshold state
     private float mAmplitudeEstimate = 1.0f;
