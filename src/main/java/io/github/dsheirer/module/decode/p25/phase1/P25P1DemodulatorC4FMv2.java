@@ -101,7 +101,7 @@ public class P25P1DemodulatorC4FMv2
     private double mGardnerAlpha = 0.0f; // proportional gain (computed from bandwidth)
     private double mGardnerBeta = 0.0f;  // integral gain (computed from bandwidth)
     private double mGardnerW = 0.0;      // frequency (integral) state
-    private boolean mGardnerEnabled = true;
+    private boolean mGardnerEnabled = false;
     private static final double GARDNER_MAX_ADJUSTMENT = 0.2; // max +/- samples per symbol
 
     // AFC state
@@ -330,7 +330,7 @@ public class P25P1DemodulatorC4FMv2
                             samplePoint += adjustment;
                         }
                     }
-                    else if(!mGardnerEnabled || !fineSync)
+                    else if(!mGardnerEnabled || !fineSync || mPreviousSymbolBufferOffset <= 0)
                     {
                         // Fall back to original slope-based adjustment in coarse mode or when Gardner disabled
                         samplePoint += mEqualizer.getAdjustment(softSymbol, symbol, bufferPointer);
