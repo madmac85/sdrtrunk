@@ -71,6 +71,7 @@ public class DecodeQualityTest
         void setSampleRate(double rate);
         void receive(ComplexSamples samples);
         int getSyncBlockedCount();
+        default String getFramerDiagnosticJson() { return ""; }
     }
 
     public static void main(String[] args)
@@ -119,6 +120,7 @@ public class DecodeQualityTest
         }
 
         boolean fullMode = "full".equals(mode);
+        boolean diagnosticMode = "diagnostic".equals(mode);
 
         TestJmbeCodecLoader codec = null;
         if(fullMode && jmbePath != null)
@@ -157,7 +159,8 @@ public class DecodeQualityTest
             System.out.printf("%n━━━ %s ━━━%n", bbFile.getName());
             System.out.printf("  Channel: %s | Mod: %s | NAC: %d | Tuner: %s%n", channelName, modulation, nac, tuner);
 
-            DecodeResult result = runDecode(bbFile, modulation, nac, diagEnabled, maxBchErrors, cmaAcqMu, cmaTrkMu, cmaShiftMs);
+            String[] framerDiagHolder = diagnosticMode ? new String[]{""} : null;
+            DecodeResult result = runDecode(bbFile, modulation, nac, diagEnabled || diagnosticMode, maxBchErrors, cmaAcqMu, cmaTrkMu, cmaShiftMs, framerDiagHolder);
 
             int audioSegments = 0;
             double audioSeconds = 0;
@@ -186,6 +189,10 @@ public class DecodeQualityTest
                 result.lduCount, result.validMessages, result.totalMessages, result.syncBlockedCount);
             System.out.printf("  Signal: %.1fs / %.1fs file | Decode ratio: %.1f%%%n",
                 result.signalSeconds, result.totalFileSeconds, decodeRatio);
+            if(diagnosticMode && framerDiagHolder != null)
+            {
+                System.out.printf("  Framer: %s%n", framerDiagHolder[0].replace("\"", "").replace(",", " |"));
+            }
 
             // Print IMBE diagnostic summary if available
             IMBEDiagSummary diag = result.diagSummary;
@@ -221,13 +228,14 @@ public class DecodeQualityTest
                 "\"ldu_count\": %d, \"valid_messages\": %d, \"total_messages\": %d, \"sync_blocked\": %d, " +
                 "\"bit_errors\": %d, \"sync_losses\": %d, \"audio_seconds\": %.2f, \"audio_segments\": %d, " +
                 "\"silence_seconds\": %.2f, \"silence_percentage\": %.2f, \"silence_region_count\": %d, " +
-                "\"signal_seconds\": %.2f, \"total_file_seconds\": %.2f, \"decode_ratio\": %.2f%s}",
+                "\"signal_seconds\": %.2f, \"total_file_seconds\": %.2f, \"decode_ratio\": %.2f%s%s}",
                 escapeJson(bbFile.getName()), escapeJson(channelName), escapeJson(system), escapeJson(site),
                 modulation, nac, escapeJson(tuner), isFD,
                 result.lduCount, result.validMessages, result.totalMessages, result.syncBlockedCount,
                 result.bitErrors, result.syncLosses, audioSeconds, audioSegments,
                 silenceSeconds, silencePercentage, silenceRegionCount,
-                result.signalSeconds, result.totalFileSeconds, decodeRatio, diagJson));
+                result.signalSeconds, result.totalFileSeconds, decodeRatio, diagJson,
+                framerDiagHolder != null ? framerDiagHolder[0] : ""));
         }
 
         json.append("\n]\n");
@@ -298,12 +306,33 @@ public class DecodeQualityTest
                     public void setSampleRate(double r) { d.setSampleRate(r); }
                     public void receive(ComplexSamples s) { d.receive(s); }
                     public int getSyncBlockedCount() { return extractSyncBlockedReflection(d); }
+                    public String getFramerDiagnosticJson()
+                    {
+                        var framer = d.getMessageFramer();
+                        var demod = d.getDemodulator();
+                        return String.format(
+                            ", \"framer_sync_detections\": %d, \"framer_nid_success\": %d, \"framer_nid_fail\": %d" +
+                            ", \"framer_sync_blocked\": %d, \"framer_fallback_sync\": %d, \"framer_recovery_sync\": %d" +
+                            ", \"framer_initial_acq_sync\": %d, \"framer_flywheel_attempts\": %d" +
+                            ", \"framer_flywheel_success\": %d, \"framer_flywheel_miss\": %d" +
+                            ", \"demod_nid_valid_success\": %d, \"demod_nid_valid_fail\": %d, \"demod_nid_nac_mismatch\": %d",
+                            framer.getSyncDetectionCount(), framer.getNIDDecodeSuccessCount(), framer.getNIDDecodeFailCount(),
+                            framer.getSyncBlockedCount(), framer.getFallbackSyncCount(), framer.getRecoverySyncCount(),
+                            framer.getInitialAcquisitionSyncCount(), framer.getFlywheelAttemptCount(),
+                            framer.getFlywheelSuccessCount(), framer.getFlywheelMissCount(),
+                            demod.getNidValidationSuccess(), demod.getNidValidationFail(), demod.getNidNacMismatch());
+                    }
                 };
             }
         };
     }
 
     private static DecodeResult runDecode(File file, String modulation, int nac, boolean diagEnabled, int maxBchErrors, float cmaAcqMu, float cmaTrkMu, int cmaShiftMs)
+    {
+        return runDecode(file, modulation, nac, diagEnabled, maxBchErrors, cmaAcqMu, cmaTrkMu, cmaShiftMs, null);
+    }
+
+    private static DecodeResult runDecode(File file, String modulation, int nac, boolean diagEnabled, int maxBchErrors, float cmaAcqMu, float cmaTrkMu, int cmaShiftMs, String[] framerDiagHolder)
     {
         int[] ldu = {0}, valid = {0}, total = {0}, bitErr = {0}, syncLoss = {0};
         double[] signalSeconds = {0}, totalFileSeconds = {0};
@@ -397,6 +426,10 @@ public class DecodeQualityTest
             decoder.setSampleRate(sampleRate);
             while(source.next(2048)) {}
             syncBlocked = decoder.getSyncBlockedCount();
+            if(framerDiagHolder != null && framerDiagHolder.length > 0)
+            {
+                framerDiagHolder[0] = decoder.getFramerDiagnosticJson();
+            }
             decoder.stop();
 
             totalFileSeconds[0] = totalSamples[0] / sampleRate;

@@ -1179,6 +1179,39 @@ public class P25P1MessageFramer
         return mMaxBchErrors;
     }
 
+    public int getFlywheelAttemptCount()
+    {
+        return mFlywheelAttemptCount;
+    }
+
+    public int getFlywheelSuccessCount()
+    {
+        return mFlywheelSuccessCount;
+    }
+
+    public int getFlywheelMissCount()
+    {
+        return mFlywheelMissCount;
+    }
+
+    /**
+     * Resets all diagnostic counters to zero. Call between file decodes.
+     */
+    public void resetDiagnostics()
+    {
+        mSyncDetectionCount = 0;
+        mNIDDecodeSuccessCount = 0;
+        mNIDDecodeFailCount = 0;
+        mSyncBlockedCount = 0;
+        mFallbackSyncCount = 0;
+        mRecoverySyncCount = 0;
+        mFadeRecoverySyncCount = 0;
+        mInitialAcquisitionSyncCount = 0;
+        mFlywheelAttemptCount = 0;
+        mFlywheelSuccessCount = 0;
+        mFlywheelMissCount = 0;
+    }
+
     /**
      * Sets the listener to receive framed DMR messages.
      * @param listener for messages.

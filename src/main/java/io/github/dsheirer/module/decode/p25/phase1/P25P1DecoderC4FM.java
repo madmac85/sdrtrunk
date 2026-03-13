@@ -184,6 +184,16 @@ public class P25P1DecoderC4FM extends FeedbackDecoder implements IByteBufferProv
     }
 
     /**
+     * Accessor for the message framer's diagnostic counters.
+     */
+    public P25P1MessageFramer getMessageFramer() { return mMessageFramer; }
+
+    /**
+     * Accessor for the demodulator's diagnostic counters.
+     */
+    public P25P1DemodulatorC4FM getDemodulator() { return mSymbolProcessor; }
+
+    /**
      * Constructs a baseband filter for this decoder using the current sample rate
      */
     private float[] getBasebandFilter(double sampleRate)

@@ -201,6 +201,13 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
     // Signal energy provider for audio continuity holdover decisions
     private ISignalEnergyProvider mSignalEnergyProvider;
 
+    // Diagnostic message-type counters
+    private int mDiagHduCount = 0;
+    private int mDiagLduCount = 0;
+    private int mDiagTduCount = 0;
+    private int mDiagTsbkCount = 0;
+    private int mDiagCallStartCount = 0;
+
     // Audio continuity holdover state
     private long mLastValidLDUTimestamp = 0;
     private int mHoldoverMs = DecodeConfigP25Phase1.DEFAULT_AUDIO_HOLDOVER_MS;
@@ -880,6 +887,7 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
      */
     private void processHDU(IMessage message)
     {
+        mDiagHduCount++;
         if(message.isValid() && message instanceof HDUMessage hdu)
         {
             HeaderData headerData = hdu.getHeaderData();
@@ -906,6 +914,7 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
                 }
                 else
                 {
+                    mDiagCallStartCount++;
                     broadcast(new DecoderStateEvent(this, Event.START, State.CALL));
                 }
             }
@@ -921,6 +930,7 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
      */
     private void processLDU(P25P1Message message)
     {
+        mDiagLduCount++;
         boolean validLDUProcessed = false;
 
         if(message instanceof LDU1Message ldu1)
@@ -1045,6 +1055,7 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
      */
     private void processTDU(P25P1Message message)
     {
+        mDiagTduCount++;
         // Reset holdover state - transmission explicitly ended
         mLastValidLDUTimestamp = 0;
         mHoldoverActive = false;
@@ -1326,6 +1337,7 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
      */
     private void processTSBK(P25P1Message message)
     {
+        mDiagTsbkCount++;
         broadcastControlState();
 
         if(message.isValid() && message instanceof TSBKMessage tsbk)
@@ -2425,5 +2437,20 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
         {
             LOGGER.error("Error in periodic holdover check", e);
         }
+    }
+
+    public int getDiagHduCount() { return mDiagHduCount; }
+    public int getDiagLduCount() { return mDiagLduCount; }
+    public int getDiagTduCount() { return mDiagTduCount; }
+    public int getDiagTsbkCount() { return mDiagTsbkCount; }
+    public int getDiagCallStartCount() { return mDiagCallStartCount; }
+
+    public void resetDiagnostics()
+    {
+        mDiagHduCount = 0;
+        mDiagLduCount = 0;
+        mDiagTduCount = 0;
+        mDiagTsbkCount = 0;
+        mDiagCallStartCount = 0;
     }
 }
