@@ -18,6 +18,8 @@
  */
 package io.github.dsheirer.source.tuner.configuration;
 
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.annotation.JsonAnySetter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
@@ -36,6 +38,8 @@ import io.github.dsheirer.source.tuner.rtl.fc0013.FC0013TunerConfiguration;
 import io.github.dsheirer.source.tuner.rtl.r8x.r820t.R820TTunerConfiguration;
 import io.github.dsheirer.source.tuner.rtl.r8x.r828d.R828DTunerConfiguration;
 import io.github.dsheirer.source.tuner.sdrplay.RspTunerConfiguration;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * Abstract class to hold a configuration for a specific type of tuner
@@ -184,5 +188,23 @@ public abstract class TunerConfiguration
     public void setMaximumFrequency(long maximumFrequency)
     {
         mMaximumFrequency = maximumFrequency;
+    }
+
+    private Map<String, Object> mUnknownProperties;
+
+    @JsonAnySetter
+    public void setUnknownProperty(String key, Object value)
+    {
+        if(mUnknownProperties == null)
+        {
+            mUnknownProperties = new LinkedHashMap<>();
+        }
+        mUnknownProperties.put(key, value);
+    }
+
+    @JsonAnyGetter
+    public Map<String, Object> getUnknownProperties()
+    {
+        return mUnknownProperties;
     }
 }

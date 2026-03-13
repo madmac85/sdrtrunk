@@ -18,6 +18,8 @@
  ******************************************************************************/
 package io.github.dsheirer.alias.action;
 
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.annotation.JsonAnySetter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
@@ -27,6 +29,8 @@ import io.github.dsheirer.alias.action.beep.BeepAction;
 import io.github.dsheirer.alias.action.clip.ClipAction;
 import io.github.dsheirer.alias.action.script.ScriptAction;
 import io.github.dsheirer.message.IMessage;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import javafx.beans.Observable;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.util.Callback;
@@ -93,5 +97,23 @@ public abstract class AliasAction
     public static Callback<AliasAction,Observable[]> extractor()
     {
         return (AliasAction aliasAction) -> new Observable[] {aliasAction.valueProperty()};
+    }
+
+    private Map<String, Object> mUnknownProperties;
+
+    @JsonAnySetter
+    public void setUnknownProperty(String key, Object value)
+    {
+        if(mUnknownProperties == null)
+        {
+            mUnknownProperties = new LinkedHashMap<>();
+        }
+        mUnknownProperties.put(key, value);
+    }
+
+    @JsonAnyGetter
+    public Map<String, Object> getUnknownProperties()
+    {
+        return mUnknownProperties;
     }
 }

@@ -18,6 +18,8 @@
  */
 package io.github.dsheirer.alias.id;
 
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.annotation.JsonAnySetter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
@@ -46,6 +48,8 @@ import io.github.dsheirer.alias.id.talkgroup.StreamAsTalkgroup;
 import io.github.dsheirer.alias.id.talkgroup.Talkgroup;
 import io.github.dsheirer.alias.id.talkgroup.TalkgroupRange;
 import io.github.dsheirer.alias.id.tone.TonesID;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import javafx.beans.Observable;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
@@ -166,5 +170,23 @@ public abstract class AliasID
     public static Callback<AliasID,Observable[]> extractor()
     {
         return (AliasID aid) -> new Observable[] {aid.valueProperty(), aid.overlapProperty()};
+    }
+
+    private Map<String, Object> mUnknownProperties;
+
+    @JsonAnySetter
+    public void setUnknownProperty(String key, Object value)
+    {
+        if(mUnknownProperties == null)
+        {
+            mUnknownProperties = new LinkedHashMap<>();
+        }
+        mUnknownProperties.put(key, value);
+    }
+
+    @JsonAnyGetter
+    public Map<String, Object> getUnknownProperties()
+    {
+        return mUnknownProperties;
     }
 }

@@ -18,14 +18,10 @@
  */
 package io.github.dsheirer.module.decode.config;
 
-import com.fasterxml.jackson.annotation.JsonAnyGetter;
-import com.fasterxml.jackson.annotation.JsonAnySetter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlRootElement;
 import io.github.dsheirer.controller.config.Configuration;
 import io.github.dsheirer.module.decode.DecoderType;
@@ -61,35 +57,6 @@ public abstract class DecodeConfiguration extends Configuration
 
     public DecodeConfiguration()
     {
-    }
-
-    /**
-     * Captures unknown/unrecognized config properties during deserialization so they are preserved
-     * when the playlist is re-saved. This prevents config data loss when running an older code version
-     * that doesn't define newer config fields.
-     */
-    private Map<String, Object> mUnknownProperties;
-
-    /**
-     * Captures any unrecognized properties during deserialization.
-     */
-    @JsonAnySetter
-    public void setUnknownProperty(String key, Object value)
-    {
-        if(mUnknownProperties == null)
-        {
-            mUnknownProperties = new LinkedHashMap<>();
-        }
-        mUnknownProperties.put(key, value);
-    }
-
-    /**
-     * Re-emits preserved unknown properties during serialization.
-     */
-    @JsonAnyGetter
-    public Map<String, Object> getUnknownProperties()
-    {
-        return mUnknownProperties;
     }
 
     @JsonIgnore
