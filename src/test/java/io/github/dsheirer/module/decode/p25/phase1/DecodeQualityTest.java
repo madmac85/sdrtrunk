@@ -285,6 +285,7 @@ public class DecodeQualityTest
             case "C4FM_V2" ->
             {
                 P25P1DecoderC4FMv2 d = new P25P1DecoderC4FMv2();
+                if(nac > 0) d.setConfiguredNAC(nac);
                 yield new DecoderWrapper()
                 {
                     public void setMessageListener(Listener<IMessage> l) { d.setMessageListener(l); }
@@ -298,6 +299,7 @@ public class DecodeQualityTest
             default ->
             {
                 P25P1DecoderC4FM d = new P25P1DecoderC4FM();
+                if(nac > 0) d.setConfiguredNAC(nac);
                 yield new DecoderWrapper()
                 {
                     public void setMessageListener(Listener<IMessage> l) { d.setMessageListener(l); }

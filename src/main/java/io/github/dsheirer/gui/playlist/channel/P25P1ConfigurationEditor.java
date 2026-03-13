@@ -163,7 +163,7 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
             GridPane.setConstraints(directionLabel, 5, 0);
             gridPane.getChildren().add(directionLabel);
 
-            // NAC configuration (row 1) - only visible for LSM v2
+            // NAC configuration (row 1) - visible for all modulations
             mNACLabel = new Label("NAC (0=auto)");
             GridPane.setHalignment(mNACLabel, HPos.RIGHT);
             GridPane.setConstraints(mNACLabel, 0, 1);
@@ -438,7 +438,7 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
             mNACSpinner = new Spinner();
             mNACSpinner.setDisable(true);
             mNACSpinner.setTooltip(new Tooltip("Network Access Code (NAC) for this channel. Set to 0 for auto-detect, " +
-                    "or enter the known NAC (1-4095) for improved decode reliability with LSM v2."));
+                    "or enter the known NAC (1-4095) for improved NID error correction."));
             mNACSpinner.getStyleClass().add(Spinner.STYLE_CLASS_SPLIT_ARROWS_HORIZONTAL);
             mNACSpinner.setEditable(true);
             mNACSpinner.setPrefWidth(100);
@@ -454,21 +454,12 @@ public class P25P1ConfigurationEditor extends ChannelConfigurationEditor
 
     /**
      * Updates the visibility of LSM v2 specific options based on the selected modulation.
-     * NAC configuration and voice-only options are only shown for LSM v2 modulation.
+     * NAC is shown for all modulations. Other options are LSM v2 only.
      */
     private void updateLSMv2OptionsVisibility()
     {
         boolean showLsmV2Options = getLSMv2ToggleButton().isSelected();
         boolean showCmaOptions = showLsmV2Options;
-
-        // NAC spinner - LSM v2 only
-        if(mNACLabel != null)
-        {
-            mNACLabel.setVisible(showLsmV2Options);
-            mNACLabel.setManaged(showLsmV2Options);
-        }
-        getNACSpinner().setVisible(showLsmV2Options);
-        getNACSpinner().setManaged(showLsmV2Options);
 
         // Skip encryption switch - LSM v2 only
         if(mIgnoreEncryptionLabel != null)

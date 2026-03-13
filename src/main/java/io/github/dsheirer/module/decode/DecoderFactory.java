@@ -279,7 +279,12 @@ public class DecoderFactory
             switch(p1.getModulation())
             {
                 case C4FM:
-                    modules.add(new P25P1DecoderC4FM());
+                    P25P1DecoderC4FM c4fmDecoder = new P25P1DecoderC4FM();
+                    if(p1.hasConfiguredNAC())
+                    {
+                        c4fmDecoder.setConfiguredNAC(p1.getConfiguredNAC());
+                    }
+                    modules.add(c4fmDecoder);
                     break;
                 case C4FM_V2:
                     P25P1DecoderC4FMv2 c4fmv2Decoder = new P25P1DecoderC4FMv2();
@@ -288,10 +293,19 @@ public class DecoderFactory
                     c4fmv2Decoder.setAdaptiveThresholdsEnabled(p1.isAdaptiveThresholds());
                     c4fmv2Decoder.setDfeEnabled(p1.isDfeEnabled());
                     c4fmv2Decoder.setDfeMu(p1.getDfeMu());
+                    if(p1.hasConfiguredNAC())
+                    {
+                        c4fmv2Decoder.setConfiguredNAC(p1.getConfiguredNAC());
+                    }
                     modules.add(c4fmv2Decoder);
                     break;
                 case CQPSK:
-                    modules.add(new P25P1DecoderLSM());
+                    P25P1DecoderLSM lsmDecoder = new P25P1DecoderLSM();
+                    if(p1.hasConfiguredNAC())
+                    {
+                        lsmDecoder.setConfiguredNAC(p1.getConfiguredNAC());
+                    }
+                    modules.add(lsmDecoder);
                     break;
                 case CQPSK_V2:
                     lsmv2Decoder = new P25P1DecoderLSMv2();

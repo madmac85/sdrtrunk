@@ -184,6 +184,15 @@ public class P25P1DecoderC4FM extends FeedbackDecoder implements IByteBufferProv
     }
 
     /**
+     * Sets the configured NAC for improved NID error correction.
+     * @param nac the configured NAC value (0-4095), or 0 to use automatic tracking
+     */
+    public void setConfiguredNAC(int nac)
+    {
+        mMessageFramer.setConfiguredNAC(nac);
+    }
+
+    /**
      * Accessor for the message framer's diagnostic counters.
      */
     public P25P1MessageFramer getMessageFramer() { return mMessageFramer; }
