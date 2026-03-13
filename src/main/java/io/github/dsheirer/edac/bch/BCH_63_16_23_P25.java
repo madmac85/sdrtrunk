@@ -46,8 +46,11 @@ public class BCH_63_16_23_P25 extends BCH_63
         super.decode(message);
     }
 
-    // Valid P25 Phase 1 DUID values that appear in the NID
-    private static final int[] VALID_DUIDS = {0, 3, 5, 7, 10, 12, 15};
+    // Valid P25 Phase 1 DUID values that appear in the NID.
+    // Order matters: LDU1/LDU2 are tried first because they are the most common frame types
+    // (~10:1 ratio vs HDU/TDU). Previous order {0,3,5,7,10,12,15} caused NAC-assisted
+    // correction to preferentially decode voice frames as TDU, producing a TDU flood.
+    private static final int[] VALID_DUIDS = {5, 10, 0, 3, 7, 12, 15};
 
     /**
      * Attempts to error correct the NID message.  If the message is uncorrectable and a configured NAC is provided,

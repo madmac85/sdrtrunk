@@ -894,6 +894,10 @@ public class P25P1MessageFramer
      * @param dataUnitID decoded from the NID
      * @param detectedBitErrors across the SYNc and NID
      */
+    private int mDuidCorrectionCount = 0;
+
+    public int getDuidCorrectionCount() { return mDuidCorrectionCount; }
+
     public void nidDetected(int nac, P25P1DataUnitID dataUnitID, int detectedBitErrors)
     {
         mDetectedDataUnitID = dataUnitID;
@@ -902,6 +906,20 @@ public class P25P1MessageFramer
         if(mDetectedDataUnitID == P25P1DataUnitID.UNKNOWN)
         {
             mDetectedDataUnitID = P25P1DataUnitID.PLACE_HOLDER;
+        }
+
+        //Context-aware DUID correction: BCH error correction can produce a wrong DUID (commonly TDU
+        //when the actual frame is LDU). When the previous DUID predicts an LDU continuation but BCH
+        //decoded a TDU, override with the predicted DUID. This fixes the "TDU flood" problem where
+        //voice frames are misidentified as terminators during active calls.
+        if(mDetectedDataUnitID == P25P1DataUnitID.TERMINATOR_DATA_UNIT)
+        {
+            P25P1DataUnitID predicted = predictNextDUID(mPreviousDataUnitID);
+            if(predicted != null)
+            {
+                mDetectedDataUnitID = predicted;
+                mDuidCorrectionCount++;
+            }
         }
 
         if(mDetectedDataUnitID != P25P1DataUnitID.PLACE_HOLDER)
