@@ -26,9 +26,9 @@ import com.fasterxml.jackson.annotation.JsonEnumDefaultValue;
  */
 public enum Modulation
 {
-    @JsonEnumDefaultValue
     CQPSK("Simulcast (LSM)"),
     CQPSK_V2("Conventional (LSM v2)"),
+    @JsonEnumDefaultValue
     C4FM("Normal (C4FM)");
 
     private final String mLabel;

@@ -19,7 +19,9 @@
 package io.github.dsheirer.module.decode.p25.phase1;
 
 
+import com.fasterxml.jackson.annotation.JsonGetter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonSetter;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
 import io.github.dsheirer.module.decode.DecoderType;
 import io.github.dsheirer.source.tuner.channel.ChannelSpecification;
@@ -70,6 +72,7 @@ public class DecodeConfigP25Phase1 extends DecodeConfigP25
     public static final int CMA_GEAR_SHIFT_MS_MAXIMUM = 1000;
 
     private Modulation mModulation = Modulation.C4FM;
+    private String mModulationRaw; // Preserves unknown modulation enum values for round-trip serialization
     private int mConfiguredNAC = 0; // 0 = auto-detect, 1-4095 = configured NAC
     private int mAudioHoldoverMs = DEFAULT_AUDIO_HOLDOVER_MS;
     private boolean mIgnoreEncryptionState = false;
@@ -92,15 +95,53 @@ public class DecodeConfigP25Phase1 extends DecodeConfigP25
         return DecoderType.P25_PHASE1;
     }
 
-    @JacksonXmlProperty(isAttribute = true, localName = "modulation")
+    /**
+     * Gets the modulation enum for runtime use.
+     */
+    @JsonIgnore
     public Modulation getModulation()
     {
         return mModulation;
     }
 
+    /**
+     * Sets the modulation for runtime use.
+     */
+    @JsonIgnore
     public void setModulation(Modulation modulation)
     {
         mModulation = modulation;
+        mModulationRaw = modulation.name();
+    }
+
+    /**
+     * Jackson serialization getter — returns the raw modulation string to preserve
+     * unknown enum values (e.g. C4FM_V2 on a codebase that doesn't define it yet).
+     */
+    @JacksonXmlProperty(isAttribute = true, localName = "modulation")
+    @JsonGetter("modulation")
+    public String getModulationString()
+    {
+        return mModulationRaw != null ? mModulationRaw : mModulation.name();
+    }
+
+    /**
+     * Jackson deserialization setter — captures the raw string to preserve unknown enum values,
+     * while resolving to the best-matching enum for runtime use.
+     */
+    @JsonSetter("modulation")
+    public void setModulationString(String value)
+    {
+        mModulationRaw = value;
+        try
+        {
+            mModulation = Modulation.valueOf(value);
+        }
+        catch(IllegalArgumentException e)
+        {
+            // Unknown modulation value — preserve raw string, use C4FM as safe fallback
+            mModulation = Modulation.C4FM;
+        }
     }
 
     /**
