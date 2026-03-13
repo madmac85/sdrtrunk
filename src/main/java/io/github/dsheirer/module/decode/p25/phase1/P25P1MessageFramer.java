@@ -909,12 +909,30 @@ public class P25P1MessageFramer
         }
 
         //Context-aware DUID correction: BCH error correction can produce a wrong DUID (commonly TDU
-        //when the actual frame is LDU). When the previous DUID predicts an LDU continuation but BCH
-        //decoded a TDU, override with the predicted DUID. This fixes the "TDU flood" problem where
-        //voice frames are misidentified as terminators during active calls.
+        //when the actual frame is LDU). This fixes the "TDU flood" problem where voice frames are
+        //misidentified as terminators during active calls.
+        //
+        //Two correction strategies:
+        //1. Sequence prediction: if previous DUID was HDU/LDU1/LDU2, predict the next DUID
+        //2. Frame length inference: if the dibit count since last NID matches LDU frame length
+        //   (~841 dibits), the PREVIOUS frame was actually an LDU regardless of its decoded DUID,
+        //   so use that to establish context for the current frame.
         if(mDetectedDataUnitID == P25P1DataUnitID.TERMINATOR_DATA_UNIT)
         {
+            //Strategy 1: Direct sequence prediction from previous DUID
             P25P1DataUnitID predicted = predictNextDUID(mPreviousDataUnitID);
+
+            //Strategy 2: Consecutive TDU detection. In normal P25, TDU occurs once at end of call.
+            //Consecutive TDUs (prevDUID=TDU) indicate DUID mis-decode: BCH corrected LDU frames to TDU
+            //and the 0-bit TDU assembler caused immediate re-sync at 57-dibit intervals. Break the cycle
+            //by treating the second+ consecutive TDU as LDU1 to restart voice frame assembly.
+            if(predicted == null &&
+               (mPreviousDataUnitID == P25P1DataUnitID.TERMINATOR_DATA_UNIT ||
+                mPreviousDataUnitID == P25P1DataUnitID.TERMINATOR_DATA_UNIT_LINK_CONTROL))
+            {
+                predicted = P25P1DataUnitID.LOGICAL_LINK_DATA_UNIT_1;
+            }
+
             if(predicted != null)
             {
                 mDetectedDataUnitID = predicted;
