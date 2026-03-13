@@ -18,6 +18,8 @@
  */
 package io.github.dsheirer.audio.broadcast;
 
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.annotation.JsonAnySetter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
@@ -44,6 +46,8 @@ import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
 @JsonSubTypes({
@@ -409,5 +413,23 @@ public abstract class BroadcastConfiguration
     {
         return (BroadcastConfiguration b) -> new Observable[] {b.nameProperty(), b.hostProperty(), b.portProperty(),
                 b.passwordProperty(), b.maximumRecordingAgeProperty(), b.delayProperty(), b.enabledProperty()};
+    }
+
+    private Map<String, Object> mUnknownProperties;
+
+    @JsonAnySetter
+    public void setUnknownProperty(String key, Object value)
+    {
+        if(mUnknownProperties == null)
+        {
+            mUnknownProperties = new LinkedHashMap<>();
+        }
+        mUnknownProperties.put(key, value);
+    }
+
+    @JsonAnyGetter
+    public Map<String, Object> getUnknownProperties()
+    {
+        return mUnknownProperties;
     }
 }

@@ -16,6 +16,8 @@
  */
 package io.github.dsheirer.settings;
 
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.annotation.JsonAnySetter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
@@ -23,6 +25,8 @@ import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlRootElement;
 import io.github.dsheirer.map.DefaultIcon;
 import io.github.dsheirer.map.MapIcon;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include= JsonTypeInfo.As.PROPERTY, property="type")
 @JsonSubTypes({
@@ -59,4 +63,22 @@ public abstract class Setting
 
     @JsonIgnore
     public abstract SettingType getType();
+
+    private Map<String, Object> mUnknownProperties;
+
+    @JsonAnySetter
+    public void setUnknownProperty(String key, Object value)
+    {
+        if(mUnknownProperties == null)
+        {
+            mUnknownProperties = new LinkedHashMap<>();
+        }
+        mUnknownProperties.put(key, value);
+    }
+
+    @JsonAnyGetter
+    public Map<String, Object> getUnknownProperties()
+    {
+        return mUnknownProperties;
+    }
 }

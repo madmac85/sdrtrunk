@@ -17,12 +17,34 @@
  ******************************************************************************/
 package io.github.dsheirer.controller.config;
 
+import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.annotation.JsonAnySetter;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlRootElement;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 @JacksonXmlRootElement(localName = "configuration")
 public abstract class Configuration
 {
+    private Map<String, Object> mUnknownProperties;
+
     public Configuration()
     {
+    }
+
+    @JsonAnySetter
+    public void setUnknownProperty(String key, Object value)
+    {
+        if(mUnknownProperties == null)
+        {
+            mUnknownProperties = new LinkedHashMap<>();
+        }
+        mUnknownProperties.put(key, value);
+    }
+
+    @JsonAnyGetter
+    public Map<String, Object> getUnknownProperties()
+    {
+        return mUnknownProperties;
     }
 }
