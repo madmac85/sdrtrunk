@@ -43,6 +43,7 @@ public class P25P1AudioModule extends ImbeAudioModule
     private boolean mIgnoreEncryptionState = false;
     private int mConsecutiveEncryptedLDU2 = 0;
     private static final int ENCRYPTION_CONFIRMATION_THRESHOLD = 2;
+    private static final int MAX_CACHED_LDU_BEFORE_ASSUME_UNENCRYPTED = 4;
 
     // Quality gate state
     private float[] mLastGoodFrame = null;
@@ -229,6 +230,16 @@ public class P25P1AudioModule extends ImbeAudioModule
                             mEncryptedCallStateEstablished = true;
                             mEncryptedCall = encrypted;
                         }
+                    }
+
+                    //If ESP keeps failing validation (e.g. missed HDU + corrupted LDU2 data),
+                    //assume unencrypted after MAX_CACHED_LDU_BEFORE_ASSUME_UNENCRYPTED messages
+                    //to prevent indefinite caching that silences entire calls.
+                    if(!mEncryptedCallStateEstablished &&
+                       mCachedLDUMessages.size() >= MAX_CACHED_LDU_BEFORE_ASSUME_UNENCRYPTED)
+                    {
+                        mEncryptedCallStateEstablished = true;
+                        mEncryptedCall = false;
                     }
 
                     if(mEncryptedCallStateEstablished)
