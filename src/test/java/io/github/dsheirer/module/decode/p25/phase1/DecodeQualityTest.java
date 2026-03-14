@@ -28,6 +28,7 @@ import io.github.dsheirer.module.decode.p25.phase1.message.ldu.IMBEFrameDiagnost
 import io.github.dsheirer.module.decode.p25.phase1.message.ldu.LDUMessage;
 import io.github.dsheirer.sample.Listener;
 import io.github.dsheirer.sample.complex.ComplexSamples;
+import org.jtransforms.fft.FloatFFT_1D;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.FileWriter;
@@ -60,7 +61,9 @@ public class DecodeQualityTest
     record DecodeResult(int lduCount, int validMessages, int totalMessages, int syncBlockedCount, int bitErrors, int syncLosses, double signalSeconds, double totalFileSeconds, IMBEDiagSummary diagSummary) {}
     record IMBEDiagSummary(int totalFrames, int totalErrors, int uncorrectableFrames, int invalidFundamentals,
                            double avgErrorsPerFrame, int maxFrameErrors, int[] errorDistribution) {}
-    record AudioResult(int segmentCount, double totalSeconds, double silenceSeconds, double silencePercentage, int silenceRegionCount) {}
+    record AudioResult(int segmentCount, double totalSeconds, double silenceSeconds, double silencePercentage,
+                       int silenceRegionCount, int artifactFrames, double artifactSeconds, double artifactPercentage,
+                       int speechFrames, double speechPercentage, double qualityScore) {}
 
     /** Wraps any P25P1 decoder to provide a uniform interface. */
     interface DecoderWrapper
@@ -167,6 +170,12 @@ public class DecodeQualityTest
             double silenceSeconds = 0;
             double silencePercentage = 0;
             int silenceRegionCount = 0;
+            int artifactFrames = 0;
+            double artifactSeconds = 0;
+            double artifactPercentage = 0;
+            int speechFrames = 0;
+            double speechPercentage = 0;
+            double qualityScore = 0;
             if(fullMode && codec != null)
             {
                 Path audioDir = outPath.resolve(sanitize(bbFile.getName()));
@@ -177,10 +186,18 @@ public class DecodeQualityTest
                 silenceSeconds = ar.silenceSeconds;
                 silencePercentage = ar.silencePercentage;
                 silenceRegionCount = ar.silenceRegionCount;
+                artifactFrames = ar.artifactFrames;
+                artifactSeconds = ar.artifactSeconds;
+                artifactPercentage = ar.artifactPercentage;
+                speechFrames = ar.speechFrames;
+                speechPercentage = ar.speechPercentage;
+                qualityScore = ar.qualityScore;
                 System.out.printf("  Audio: %.1fs in %d segments (avg %.1fs)%n",
                     audioSeconds, audioSegments, audioSegments > 0 ? audioSeconds / audioSegments : 0);
                 System.out.printf("  Silence: %.1fs (%.1f%%) in %d regions%n",
                     silenceSeconds, silencePercentage, silenceRegionCount);
+                System.out.printf("  Waveform: %d speech, %d artifact (%.1f%%), quality=%.3f%n",
+                    speechFrames, artifactFrames, artifactPercentage, qualityScore);
             }
 
             double decodeSeconds = result.lduCount * 0.18; // ~180ms per LDU
@@ -228,12 +245,16 @@ public class DecodeQualityTest
                 "\"ldu_count\": %d, \"valid_messages\": %d, \"total_messages\": %d, \"sync_blocked\": %d, " +
                 "\"bit_errors\": %d, \"sync_losses\": %d, \"audio_seconds\": %.2f, \"audio_segments\": %d, " +
                 "\"silence_seconds\": %.2f, \"silence_percentage\": %.2f, \"silence_region_count\": %d, " +
+                "\"artifact_frames\": %d, \"artifact_seconds\": %.2f, \"artifact_percentage\": %.2f, " +
+                "\"speech_frames\": %d, \"speech_percentage\": %.2f, \"quality_score\": %.4f, " +
                 "\"signal_seconds\": %.2f, \"total_file_seconds\": %.2f, \"decode_ratio\": %.2f%s%s}",
                 escapeJson(bbFile.getName()), escapeJson(channelName), escapeJson(system), escapeJson(site),
                 modulation, nac, escapeJson(tuner), isFD,
                 result.lduCount, result.validMessages, result.totalMessages, result.syncBlockedCount,
                 result.bitErrors, result.syncLosses, audioSeconds, audioSegments,
                 silenceSeconds, silencePercentage, silenceRegionCount,
+                artifactFrames, artifactSeconds, artifactPercentage,
+                speechFrames, speechPercentage, qualityScore,
                 result.signalSeconds, result.totalFileSeconds, decodeRatio, diagJson,
                 framerDiagHolder != null ? framerDiagHolder[0] : ""));
         }
@@ -615,7 +636,7 @@ public class DecodeQualityTest
         }
         catch(Exception e) { System.err.println("  AUDIO ERROR: " + e.getMessage()); }
 
-        if(audioBuffers.isEmpty()) return new AudioResult(0, 0, 0, 0, 0);
+        if(audioBuffers.isEmpty()) return new AudioResult(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
         // Silence detection: scan audio frames for decode-failure silence
         int minSilenceFrames = Math.max(1, silenceMinMs / 20); // 20ms per IMBE frame
@@ -684,7 +705,136 @@ public class DecodeQualityTest
             writeMP3(segments.get(s), audioDir.resolve(String.format("segment_%03d.mp3", s + 1)));
         }
 
-        return new AudioResult(segments.size(), totalSeconds, silSec, silPct, silRegionCount);
+        // Waveform quality analysis (spectral)
+        WaveformAnalysis waveform = analyzeWaveformQuality(audioBuffers, silenceThreshold);
+        double totalFrames = audioBuffers.size();
+        double artifactSec = waveform.artifactFrames() * 160.0 / 8000.0;
+        double artifactPct = totalFrames > 0 ? (waveform.artifactFrames() / totalFrames) * 100.0 : 0;
+        double speechPct = totalFrames > 0 ? (waveform.speechFrames() / totalFrames) * 100.0 : 0;
+
+        return new AudioResult(segments.size(), totalSeconds, silSec, silPct, silRegionCount,
+            waveform.artifactFrames(), artifactSec, artifactPct,
+            waveform.speechFrames(), speechPct, waveform.qualityScore());
+    }
+
+    enum FrameClass { SILENCE, ARTIFACT, SPEECH }
+
+    record WaveformAnalysis(int silenceFrames, int artifactFrames, int speechFrames, double qualityScore) {}
+
+    /**
+     * Analyzes decoded audio frames for silence, artifacts (squeals/tones), and speech using FFT-based spectral analysis.
+     * Each 160-sample frame (20ms at 8kHz) is zero-padded to 256 for radix-2 FFT.
+     *
+     * Classification per frame:
+     *   SILENCE:  RMS below threshold
+     *   ARTIFACT: high spectral centroid (>2500Hz) with low flatness (<0.05), or centroid >3000Hz,
+     *             or very low flatness (<0.02) with low crest factor (<2.5) indicating pure tone
+     *   SPEECH:   everything else
+     */
+    private static WaveformAnalysis analyzeWaveformQuality(List<float[]> audioBuffers, float silenceThreshold)
+    {
+        if(audioBuffers.isEmpty()) return new WaveformAnalysis(0, 0, 0, 1.0);
+
+        int fftSize = 256;
+        FloatFFT_1D fft = new FloatFFT_1D(fftSize);
+        float sampleRate = 8000.0f;
+        float binWidth = sampleRate / fftSize; // 31.25 Hz/bin
+
+        int silenceCount = 0, artifactCount = 0, speechCount = 0;
+
+        for(float[] frame : audioBuffers)
+        {
+            // Compute RMS
+            float sumSq = 0;
+            for(float sample : frame)
+            {
+                sumSq += sample * sample;
+            }
+            float rms = (float)Math.sqrt(sumSq / frame.length);
+
+            if(rms < silenceThreshold)
+            {
+                silenceCount++;
+                continue;
+            }
+
+            // Zero-pad to FFT size
+            float[] fftBuf = new float[fftSize];
+            System.arraycopy(frame, 0, fftBuf, 0, Math.min(frame.length, fftSize));
+            fft.realForward(fftBuf);
+
+            // Compute power spectrum (skip DC bin)
+            int numBins = fftSize / 2;
+            float[] power = new float[numBins];
+            for(int k = 1; k < numBins; k++)
+            {
+                float re = fftBuf[2 * k];
+                float im = fftBuf[2 * k + 1];
+                power[k] = re * re + im * im;
+            }
+
+            // Spectral centroid: sum(f_k * P_k) / sum(P_k)
+            float sumFP = 0, sumP = 0;
+            for(int k = 1; k < numBins; k++)
+            {
+                float freq = k * binWidth;
+                sumFP += freq * power[k];
+                sumP += power[k];
+            }
+            float centroid = sumP > 0 ? sumFP / sumP : 0;
+
+            // Spectral flatness: geomean(P_k) / mean(P_k)
+            // Use log-domain for geometric mean to avoid overflow/underflow
+            double logSum = 0;
+            int nonZeroBins = 0;
+            for(int k = 1; k < numBins; k++)
+            {
+                if(power[k] > 0)
+                {
+                    logSum += Math.log(power[k]);
+                    nonZeroBins++;
+                }
+            }
+            float flatness;
+            if(nonZeroBins < numBins / 2)
+            {
+                flatness = 0; // Too many zero bins — treat as tonal
+            }
+            else
+            {
+                double geoMean = Math.exp(logSum / nonZeroBins);
+                double ariMean = sumP / (numBins - 1);
+                flatness = ariMean > 0 ? (float)(geoMean / ariMean) : 0;
+            }
+
+            // Crest factor: peak / RMS
+            float peak = 0;
+            for(float sample : frame)
+            {
+                float abs = Math.abs(sample);
+                if(abs > peak) peak = abs;
+            }
+            float crest = rms > 0 ? peak / rms : 0;
+
+            // Classify frame
+            boolean highCentroid = centroid > 2500 && flatness < 0.05f;
+            boolean veryHighCentroid = centroid > 3000;
+            boolean pureTone = flatness < 0.02f && crest < 2.5f;
+
+            if(highCentroid || veryHighCentroid || pureTone)
+            {
+                artifactCount++;
+            }
+            else
+            {
+                speechCount++;
+            }
+        }
+
+        int total = Math.max(1, silenceCount + artifactCount + speechCount);
+        double quality = (double)speechCount / total;
+
+        return new WaveformAnalysis(silenceCount, artifactCount, speechCount, quality);
     }
 
     private static void writeMP3(List<float[]> audioBuffers, Path mp3File)
