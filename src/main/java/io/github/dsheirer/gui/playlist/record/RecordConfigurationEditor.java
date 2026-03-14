@@ -28,7 +28,11 @@ import io.github.dsheirer.record.config.RecordConfiguration;
 import javafx.geometry.HPos;
 import javafx.geometry.Insets;
 import javafx.scene.control.Label;
+import javafx.scene.control.Separator;
+import javafx.scene.control.Spinner;
+import javafx.scene.control.SpinnerValueFactory;
 import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
 import org.controlsfx.control.ToggleSwitch;
 
 import java.util.ArrayList;
@@ -42,6 +46,9 @@ import java.util.List;
 public class RecordConfigurationEditor extends Editor<RecordConfiguration>
 {
     private List<RecorderControl> mControls = new ArrayList<>();
+    private ToggleSwitch mActivityToggle;
+    private Spinner<Integer> mThresholdSpinner;
+    private Label mThresholdLabel;
 
     public RecordConfigurationEditor(Collection<RecorderType> types)
     {
@@ -51,6 +58,47 @@ public class RecordConfigurationEditor extends Editor<RecordConfiguration>
             mControls.add(control);
             getChildren().add(control);
         }
+
+        // Activity-triggered recording section
+        getChildren().add(new Separator());
+
+        mActivityToggle = new ToggleSwitch();
+        mActivityToggle.setDisable(true);
+        mActivityToggle.selectedProperty().addListener((observable, oldValue, newValue) -> {
+            modifiedProperty().set(true);
+            updateThresholdVisibility(newValue);
+        });
+
+        GridPane activityPane = new GridPane();
+        activityPane.setPadding(new Insets(5, 5, 5, 0));
+        activityPane.setHgap(10);
+        GridPane.setConstraints(mActivityToggle, 0, 0);
+        activityPane.getChildren().add(mActivityToggle);
+        Label activityLabel = new Label("Activity-Triggered Baseband Recording");
+        GridPane.setHalignment(activityLabel, HPos.LEFT);
+        GridPane.setConstraints(activityLabel, 1, 0);
+        activityPane.getChildren().add(activityLabel);
+        getChildren().add(activityPane);
+
+        mThresholdLabel = new Label("Squelch Threshold (dB):");
+        mThresholdSpinner = new Spinner<>(new SpinnerValueFactory.IntegerSpinnerValueFactory(-100, -30, -70, 1));
+        mThresholdSpinner.setEditable(true);
+        mThresholdSpinner.setPrefWidth(80);
+        mThresholdSpinner.valueProperty().addListener((obs, oldVal, newVal) -> modifiedProperty().set(true));
+
+        HBox thresholdBox = new HBox(10, mThresholdLabel, mThresholdSpinner);
+        thresholdBox.setPadding(new Insets(0, 5, 5, 25));
+        getChildren().add(thresholdBox);
+
+        updateThresholdVisibility(false);
+    }
+
+    private void updateThresholdVisibility(boolean visible)
+    {
+        mThresholdLabel.setVisible(visible);
+        mThresholdLabel.setManaged(visible);
+        mThresholdSpinner.setVisible(visible);
+        mThresholdSpinner.setManaged(visible);
     }
 
     @Override
@@ -68,6 +116,11 @@ public class RecordConfigurationEditor extends Editor<RecordConfiguration>
             control.getToggleSwitch().setDisable(false);
             control.getToggleSwitch().setSelected(item.getRecorders().contains(control.getRecorderType()));
         }
+
+        mActivityToggle.setDisable(false);
+        mActivityToggle.setSelected(item.isActivityTriggeredRecording());
+        mThresholdSpinner.getValueFactory().setValue(Math.round(item.getActivitySquelchThreshold()));
+        updateThresholdVisibility(item.isActivityTriggeredRecording());
 
         modifiedProperty().set(false);
     }
@@ -90,6 +143,13 @@ public class RecordConfigurationEditor extends Editor<RecordConfiguration>
             {
                 config.addRecorder(control.getRecorderType());
             }
+        }
+
+        config.setActivityTriggeredRecording(mActivityToggle.isSelected());
+
+        if(mActivityToggle.isSelected())
+        {
+            config.setActivitySquelchThreshold(mThresholdSpinner.getValue().floatValue());
         }
 
         setItem(config);
