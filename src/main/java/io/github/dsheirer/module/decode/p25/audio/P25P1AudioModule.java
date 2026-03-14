@@ -41,6 +41,8 @@ public class P25P1AudioModule extends ImbeAudioModule
     private boolean mEncryptedCall = false;
     private boolean mEncryptedCallStateEstablished = false;
     private boolean mIgnoreEncryptionState = false;
+    private int mConsecutiveEncryptedLDU2 = 0;
+    private static final int ENCRYPTION_CONFIRMATION_THRESHOLD = 2;
 
     // Quality gate state
     private float[] mLastGoodFrame = null;
@@ -156,7 +158,39 @@ public class P25P1AudioModule extends ImbeAudioModule
         {
             if(mEncryptedCallStateEstablished || mIgnoreEncryptionState)
             {
-                if(message instanceof LDUMessage ldu)
+                if(message instanceof LDU2Message ldu2)
+                {
+                    //Continuously monitor encryption state — allow recovery from false detection.
+                    //A single corrupted LDU2 with garbage ESP can falsely trigger encryption,
+                    //silencing an entire legitimate unencrypted call.
+                    if(ldu2.getEncryptionSyncParameters().isValid())
+                    {
+                        boolean encrypted = ldu2.getEncryptionSyncParameters().isEncryptedAudio();
+
+                        if(encrypted)
+                        {
+                            mConsecutiveEncryptedLDU2++;
+                        }
+                        else
+                        {
+                            mConsecutiveEncryptedLDU2 = 0;
+                        }
+
+                        //Require confirmation to transition TO encrypted (prevent false positives),
+                        //but transition immediately back to unencrypted (minimize lost audio).
+                        if(mEncryptedCall && !encrypted)
+                        {
+                            mEncryptedCall = false;
+                        }
+                        else if(!mEncryptedCall && mConsecutiveEncryptedLDU2 >= ENCRYPTION_CONFIRMATION_THRESHOLD)
+                        {
+                            mEncryptedCall = true;
+                        }
+                    }
+
+                    processAudio(ldu2);
+                }
+                else if(message instanceof LDUMessage ldu)
                 {
                     processAudio(ldu);
                 }
@@ -178,8 +212,23 @@ public class P25P1AudioModule extends ImbeAudioModule
                 {
                     if(ldu2.getEncryptionSyncParameters().isValid())
                     {
-                        mEncryptedCallStateEstablished = true;
-                        mEncryptedCall = ldu2.getEncryptionSyncParameters().isEncryptedAudio();
+                        boolean encrypted = ldu2.getEncryptionSyncParameters().isEncryptedAudio();
+
+                        if(encrypted)
+                        {
+                            mConsecutiveEncryptedLDU2++;
+                        }
+                        else
+                        {
+                            mConsecutiveEncryptedLDU2 = 0;
+                        }
+
+                        //Only establish encrypted state after confirmation threshold
+                        if(!encrypted || mConsecutiveEncryptedLDU2 >= ENCRYPTION_CONFIRMATION_THRESHOLD)
+                        {
+                            mEncryptedCallStateEstablished = true;
+                            mEncryptedCall = encrypted;
+                        }
                     }
 
                     if(mEncryptedCallStateEstablished)
