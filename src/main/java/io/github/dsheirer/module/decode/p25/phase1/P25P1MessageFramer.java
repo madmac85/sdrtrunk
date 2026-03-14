@@ -895,8 +895,6 @@ public class P25P1MessageFramer
      * @param detectedBitErrors across the SYNc and NID
      */
     private int mDuidCorrectionCount = 0;
-    private int mConsecutiveDuidCorrections = 0;
-    private static final int MAX_CONSECUTIVE_DUID_CORRECTIONS = 3;
 
     public int getDuidCorrectionCount() { return mDuidCorrectionCount; }
 
@@ -915,32 +913,17 @@ public class P25P1MessageFramer
         //misidentified as terminators during active calls.
         //
         //Sequence prediction: if previous DUID was HDU/LDU1/LDU2, predict the next DUID.
-        //Limited to MAX_CONSECUTIVE_DUID_CORRECTIONS to prevent infinite LDU cycling from noise
-        //after a call ends with a missed TDU — corrected LDUs update mPreviousDataUnitID, which
-        //causes the next TDU to also be corrected, creating an endless fake voice frame cycle.
+        //This only triggers when there's positive evidence of an active voice call, avoiding
+        //false LDU assembly from noise during idle channel periods.
         if(mDetectedDataUnitID == P25P1DataUnitID.TERMINATOR_DATA_UNIT)
         {
             P25P1DataUnitID predicted = predictNextDUID(mPreviousDataUnitID);
 
-            if(predicted != null && mConsecutiveDuidCorrections < MAX_CONSECUTIVE_DUID_CORRECTIONS)
+            if(predicted != null)
             {
                 mDetectedDataUnitID = predicted;
                 mDuidCorrectionCount++;
-                mConsecutiveDuidCorrections++;
             }
-            else
-            {
-                //Correction limit reached or no prediction available — accept the TDU.
-                //This breaks the fake LDU cycle and lets the channel fade.
-                mConsecutiveDuidCorrections = 0;
-            }
-        }
-        else if(mDetectedDataUnitID == P25P1DataUnitID.HEADER_DATA_UNIT ||
-                mDetectedDataUnitID == P25P1DataUnitID.LOGICAL_LINK_DATA_UNIT_1 ||
-                mDetectedDataUnitID == P25P1DataUnitID.LOGICAL_LINK_DATA_UNIT_2)
-        {
-            //An uncorrected voice DUID confirms we're in a real call — reset the counter.
-            mConsecutiveDuidCorrections = 0;
         }
 
         if(mDetectedDataUnitID != P25P1DataUnitID.PLACE_HOLDER)
