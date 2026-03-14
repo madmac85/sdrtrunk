@@ -212,7 +212,6 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
     private long mLastValidLDUTimestamp = 0;
     private int mHoldoverMs = DecodeConfigP25Phase1.DEFAULT_AUDIO_HOLDOVER_MS;
     private boolean mHoldoverActive = false;
-    private boolean mVoiceCallActive = false;
 
     // Periodic holdover check for extended call continuity
     private static final int HOLDOVER_CHECK_INTERVAL_MS = 100;
@@ -774,13 +773,7 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
 
     private void broadcastControlState()
     {
-        //Only broadcast control state when a voice call is not active. During idle channel periods,
-        //noise-derived false TSBK/AMBTC messages would otherwise reset the fade timer and prevent
-        //the channel from returning to IDLE, causing prolonged trailing silence.
-        if(mVoiceCallActive)
-        {
-            broadcast(new DecoderStateEvent(this, Event.DECODE, State.CONTROL));
-        }
+        broadcast(new DecoderStateEvent(this, Event.DECODE, State.CONTROL));
     }
 
     /**
@@ -914,8 +907,6 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
 
                 mTrafficChannelManager.processP1TrafficCallStart(getCurrentFrequency(), talkgroup, radio,
                         headerData.getEncryptionKey(), mCurrentServiceOptions, getCurrentChannel(), message.getTimestamp());
-
-                mVoiceCallActive = true;
 
                 if(headerData.isEncryptedAudio())
                 {
@@ -1065,14 +1056,13 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
     private void processTDU(P25P1Message message)
     {
         mDiagTduCount++;
-        // Reset holdover and voice call state - transmission explicitly ended
+        // Reset holdover state - transmission explicitly ended
         mLastValidLDUTimestamp = 0;
         mHoldoverActive = false;
-        mVoiceCallActive = false;
         stopPeriodicHoldoverCheck();
 
         mTrafficChannelManager.processP1TrafficCallEnd(getCurrentFrequency(), message.getTimestamp(), "TDU:" + message);
-        broadcast(new DecoderStateEvent(this, Event.END, State.FADE));
+        broadcast(new DecoderStateEvent(this, Event.DECODE, State.ACTIVE));
     }
 
     /**
@@ -1083,10 +1073,9 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
      */
     private void processTDULC(P25P1Message message)
     {
-        // Reset holdover and voice call state - transmission explicitly ended
+        // Reset holdover state - transmission explicitly ended
         mLastValidLDUTimestamp = 0;
         mHoldoverActive = false;
-        mVoiceCallActive = false;
         stopPeriodicHoldoverCheck();
 
         if(message instanceof TDULCMessage tdulc)
@@ -1096,7 +1085,7 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
             if(lcw != null && lcw.isValid())
             {
                 mTrafficChannelManager.processP1TrafficCallEnd(getCurrentFrequency(), message.getTimestamp(), "TDULC:" + message);
-                broadcast(new DecoderStateEvent(this, Event.END, State.FADE));
+                broadcast(new DecoderStateEvent(this, Event.DECODE, State.ACTIVE));
                 processLC(lcw, message.getTimestamp(), true);
             }
         }
@@ -1152,10 +1141,7 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
     {
         getIdentifierCollection().remove(IdentifierClass.USER);
 
-        if(mVoiceCallActive)
-        {
-            broadcast(new DecoderStateEvent(this, Event.DECODE, State.DATA));
-        }
+        broadcast(new DecoderStateEvent(this, Event.DECODE, State.DATA));
 
         if(message instanceof SNDCPPacketMessage sndcp)
         {
@@ -1288,11 +1274,7 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
     private void processSNDCP(P25P1Message message)
     {
         getIdentifierCollection().remove(IdentifierClass.USER);
-
-        if(mVoiceCallActive)
-        {
-            broadcast(new DecoderStateEvent(this, Event.DECODE, State.DATA));
-        }
+        broadcast(new DecoderStateEvent(this, Event.DECODE, State.DATA));
 
         if(message.isValid() && message instanceof SNDCPPacketMessage sndcpPacket)
         {
@@ -2442,8 +2424,7 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
                 }
                 else
                 {
-                    // Extended holdover expired - stop the periodic check and end voice call
-                    mVoiceCallActive = false;
+                    // Extended holdover expired - stop the periodic check
                     if(mHoldoverTask != null)
                     {
                         mHoldoverTask.cancel(false);
