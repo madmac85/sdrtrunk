@@ -1062,7 +1062,7 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
         stopPeriodicHoldoverCheck();
 
         mTrafficChannelManager.processP1TrafficCallEnd(getCurrentFrequency(), message.getTimestamp(), "TDU:" + message);
-        broadcast(new DecoderStateEvent(this, Event.DECODE, State.ACTIVE));
+        broadcast(new DecoderStateEvent(this, Event.END, State.FADE));
     }
 
     /**
@@ -1085,7 +1085,7 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
             if(lcw != null && lcw.isValid())
             {
                 mTrafficChannelManager.processP1TrafficCallEnd(getCurrentFrequency(), message.getTimestamp(), "TDULC:" + message);
-                broadcast(new DecoderStateEvent(this, Event.DECODE, State.ACTIVE));
+                broadcast(new DecoderStateEvent(this, Event.END, State.FADE));
                 processLC(lcw, message.getTimestamp(), true);
             }
         }
