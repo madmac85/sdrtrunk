@@ -102,6 +102,14 @@ public class P25P1DecoderC4FM extends FeedbackDecoder implements IByteBufferProv
         // so blocked syncs are almost always genuine. Guard helps CQPSK (noisy symbol recovery)
         // but costs C4FM 0.8% LDUs and 12%+ words on busy channels like Salem Fire.
         mMessageFramer.mSyncGuardEnabled = false;
+        // Fix A: Limit consecutive DUID corrections for C4FM — reliable sync means corrections
+        // past the limit indicate noise-derived frames, not genuine voice. Breaks infinite LDU cycle.
+        // System property p25.duid.limit.c4fm: 0 = disabled (unlimited), default = 3
+        int duidLimit = Integer.parseInt(System.getProperty("p25.duid.limit.c4fm", "3"));
+        if(duidLimit > 0)
+        {
+            mMessageFramer.setMaxConsecutiveDuidCorrections(duidLimit);
+        }
         mMessageProcessor.setMessageListener(getMessageListener());
         mSymbolProcessor = new P25P1DemodulatorC4FM(mMessageFramer, this);
     }

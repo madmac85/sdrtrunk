@@ -42,6 +42,17 @@ public class P25P1AudioModule extends ImbeAudioModule
     private boolean mEncryptedCallStateEstablished = false;
     private boolean mIgnoreEncryptionState = false;
 
+    // Fix B: Encryption confirmation — require multiple consecutive encrypted LDU2s before silencing
+    // System property p25.encrypt.confirm: 1 = disabled (original behavior), default = 2
+    private static final int ENCRYPTION_CONFIRMATION_THRESHOLD =
+            Integer.parseInt(System.getProperty("p25.encrypt.confirm", "2"));
+    private int mConsecutiveEncryptedLDU2 = 0;
+
+    // Fix C: LDU caching fallback — assume unencrypted if too many LDUs cached without ESP resolution
+    // System property p25.cache.fallback: 0 = disabled (unlimited caching), default = 4
+    private static final int MAX_CACHED_LDU_BEFORE_ASSUME_UNENCRYPTED =
+            Integer.parseInt(System.getProperty("p25.cache.fallback", "4"));
+
     // Quality gate state
     private float[] mLastGoodFrame = null;
     private int mTotalFrameCount = 0;
@@ -158,6 +169,20 @@ public class P25P1AudioModule extends ImbeAudioModule
             {
                 if(message instanceof LDUMessage ldu)
                 {
+                    // Fix B: Continuously monitor encryption state — if a valid LDU2 says unencrypted,
+                    // immediately flip back (handles single corrupted LDU2 that falsely set encrypted)
+                    if(ldu instanceof LDU2Message ldu2 && ldu2.getEncryptionSyncParameters().isValid())
+                    {
+                        if(ldu2.getEncryptionSyncParameters().isEncryptedAudio())
+                        {
+                            mConsecutiveEncryptedLDU2++;
+                        }
+                        else
+                        {
+                            mConsecutiveEncryptedLDU2 = 0;
+                            mEncryptedCall = false;
+                        }
+                    }
                     processAudio(ldu);
                 }
             }
@@ -170,16 +195,49 @@ public class P25P1AudioModule extends ImbeAudioModule
                 }
                 else if(message instanceof LDU1Message ldu1)
                 {
-                    //When we receive an LDU1 message without first receiving the HDU message, cache the LDU1 Message
-                    //until we can determine the encrypted call state from the next LDU2 message
-                    mCachedLDUMessages.add(ldu1);
+                    // Fix C: LDU caching fallback — if too many LDUs cached without ESP resolution,
+                    // assume unencrypted and flush cache (disabled when MAX is 0)
+                    if(MAX_CACHED_LDU_BEFORE_ASSUME_UNENCRYPTED > 0 &&
+                       mCachedLDUMessages.size() >= MAX_CACHED_LDU_BEFORE_ASSUME_UNENCRYPTED)
+                    {
+                        mEncryptedCallStateEstablished = true;
+                        mEncryptedCall = false;
+                        for(LDUMessage cachedLdu : mCachedLDUMessages)
+                        {
+                            processAudio(cachedLdu);
+                        }
+                        mCachedLDUMessages.clear();
+                        processAudio(ldu1);
+                    }
+                    else
+                    {
+                        //When we receive an LDU1 message without first receiving the HDU message, cache the LDU1 Message
+                        //until we can determine the encrypted call state from the next LDU2 message
+                        mCachedLDUMessages.add(ldu1);
+                    }
                 }
                 else if(message instanceof LDU2Message ldu2)
                 {
                     if(ldu2.getEncryptionSyncParameters().isValid())
                     {
-                        mEncryptedCallStateEstablished = true;
-                        mEncryptedCall = ldu2.getEncryptionSyncParameters().isEncryptedAudio();
+                        boolean encrypted = ldu2.getEncryptionSyncParameters().isEncryptedAudio();
+
+                        // Fix B: Require multiple consecutive encrypted LDU2s before declaring encrypted
+                        if(encrypted)
+                        {
+                            mConsecutiveEncryptedLDU2++;
+                            if(mConsecutiveEncryptedLDU2 >= ENCRYPTION_CONFIRMATION_THRESHOLD)
+                            {
+                                mEncryptedCallStateEstablished = true;
+                                mEncryptedCall = true;
+                            }
+                        }
+                        else
+                        {
+                            mConsecutiveEncryptedLDU2 = 0;
+                            mEncryptedCallStateEstablished = true;
+                            mEncryptedCall = false;
+                        }
                     }
 
                     if(mEncryptedCallStateEstablished)
@@ -194,7 +252,19 @@ public class P25P1AudioModule extends ImbeAudioModule
                     }
                     else
                     {
+                        // Fix C: Check cache size before adding (disabled when MAX is 0)
                         mCachedLDUMessages.add(ldu2);
+                        if(MAX_CACHED_LDU_BEFORE_ASSUME_UNENCRYPTED > 0 &&
+                           mCachedLDUMessages.size() >= MAX_CACHED_LDU_BEFORE_ASSUME_UNENCRYPTED)
+                        {
+                            mEncryptedCallStateEstablished = true;
+                            mEncryptedCall = false;
+                            for(LDUMessage cachedLdu : mCachedLDUMessages)
+                            {
+                                processAudio(cachedLdu);
+                            }
+                            mCachedLDUMessages.clear();
+                        }
                     }
                 }
             }
@@ -345,6 +415,7 @@ public class P25P1AudioModule extends ImbeAudioModule
                     mEncryptedCallStateEstablished = false;
                     mEncryptedCall = false;
                 }
+                mConsecutiveEncryptedLDU2 = 0;
                 mCachedLDUMessages.clear();
                 resetFrameValidation();
             }

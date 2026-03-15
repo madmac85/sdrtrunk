@@ -104,6 +104,15 @@ public class P25P1DecoderLSMv2 extends FeedbackDecoder implements IByteBufferPro
         mDemodulator = new P25P1DemodulatorLSMv2(mMessageFramer, this);
         // Strategy 1: Provide energy state to message framer for adaptive sync threshold
         mMessageFramer.setEnergyProvider(this);
+        // Fix A: Limit consecutive DUID corrections for LSMv2 — noisy symbol recovery means
+        // more corrections are legitimate, but still need a ceiling to break noise cycles.
+        // System property p25.duid.limit.lsm: 0 = disabled (unlimited), default = 15
+        // Note: 10 causes -7% LDU regression on ROC W; 15 has zero impact.
+        int duidLimit = Integer.parseInt(System.getProperty("p25.duid.limit.lsm", "15"));
+        if(duidLimit > 0)
+        {
+            mMessageFramer.setMaxConsecutiveDuidCorrections(duidLimit);
+        }
         // Configure gear-shifting if system properties are set
         // cma.acq.mu = acquisition mu (fast convergence after cold-start)
         // cma.trk.mu = tracking mu (low distortion during steady state)

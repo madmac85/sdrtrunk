@@ -895,8 +895,22 @@ public class P25P1MessageFramer
      * @param detectedBitErrors across the SYNc and NID
      */
     private int mDuidCorrectionCount = 0;
+    private int mMaxConsecutiveDuidCorrections = Integer.MAX_VALUE; // Default: unlimited for backward compat
+    private int mConsecutiveDuidCorrections = 0;
 
     public int getDuidCorrectionCount() { return mDuidCorrectionCount; }
+
+    /**
+     * Sets the maximum number of consecutive DUID corrections before accepting TDU as-is.
+     * After a missed TDU, mPreviousDataUnitID stays as LDU, causing infinite correction cycle
+     * that produces fake voice frames from noise. This limit breaks the cycle.
+     *
+     * @param limit max consecutive corrections (3 for C4FM, 10 for LSMv2)
+     */
+    public void setMaxConsecutiveDuidCorrections(int limit)
+    {
+        mMaxConsecutiveDuidCorrections = limit;
+    }
 
     public void nidDetected(int nac, P25P1DataUnitID dataUnitID, int detectedBitErrors)
     {
@@ -915,14 +929,38 @@ public class P25P1MessageFramer
         //Sequence prediction: if previous DUID was HDU/LDU1/LDU2, predict the next DUID.
         //This only triggers when there's positive evidence of an active voice call, avoiding
         //false LDU assembly from noise during idle channel periods.
+        //
+        //Consecutive correction limit: After a missed TDU, mPreviousDataUnitID stays as LDU, causing
+        //infinite correction cycle from noise. When the limit is reached, accept TDU and reset.
         if(mDetectedDataUnitID == P25P1DataUnitID.TERMINATOR_DATA_UNIT)
         {
-            P25P1DataUnitID predicted = predictNextDUID(mPreviousDataUnitID);
-
-            if(predicted != null)
+            if(mConsecutiveDuidCorrections < mMaxConsecutiveDuidCorrections)
             {
-                mDetectedDataUnitID = predicted;
-                mDuidCorrectionCount++;
+                P25P1DataUnitID predicted = predictNextDUID(mPreviousDataUnitID);
+
+                if(predicted != null)
+                {
+                    mDetectedDataUnitID = predicted;
+                    mDuidCorrectionCount++;
+                    mConsecutiveDuidCorrections++;
+                }
+            }
+            else
+            {
+                // Limit reached — accept TDU and break the correction cycle
+                mConsecutiveDuidCorrections = 0;
+            }
+        }
+
+        // Reset consecutive correction counter on uncorrected voice DUIDs (genuine voice frames)
+        if(mDetectedDataUnitID == P25P1DataUnitID.HEADER_DATA_UNIT ||
+           mDetectedDataUnitID == P25P1DataUnitID.LOGICAL_LINK_DATA_UNIT_1 ||
+           mDetectedDataUnitID == P25P1DataUnitID.LOGICAL_LINK_DATA_UNIT_2)
+        {
+            if(dataUnitID == mDetectedDataUnitID)
+            {
+                // BCH decoded this DUID without correction — genuine voice frame
+                mConsecutiveDuidCorrections = 0;
             }
         }
 
