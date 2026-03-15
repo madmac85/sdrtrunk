@@ -32,6 +32,7 @@ import io.github.dsheirer.protocol.Protocol;
 public abstract class P25P1Message extends TimeslotMessage implements IMessage
 {
     private Identifier mNAC;
+    private boolean mDuidCorrected = false;
 
     /**
      * Constructs a P25 message.
@@ -74,6 +75,24 @@ public abstract class P25P1Message extends TimeslotMessage implements IMessage
     public Identifier getNAC()
     {
         return mNAC;
+    }
+
+    /**
+     * Indicates if this message's DUID was corrected by the context-aware prediction logic
+     * (e.g., TDU corrected to LDU based on voice call sequence). Corrected LDUs after a missed
+     * TDU contain noise, not voice, and should be suppressed by audio processing.
+     */
+    public boolean isDuidCorrected()
+    {
+        return mDuidCorrected;
+    }
+
+    /**
+     * Marks this message as having a DUID that was corrected by context-aware prediction.
+     */
+    public void setDuidCorrected(boolean corrected)
+    {
+        mDuidCorrected = corrected;
     }
 
     /**

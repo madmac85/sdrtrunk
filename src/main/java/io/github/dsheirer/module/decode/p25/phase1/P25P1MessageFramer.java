@@ -524,6 +524,12 @@ public class P25P1MessageFramer
 
         if(message != null)
         {
+            // Mark messages whose DUID was corrected by context-aware prediction.
+            // These are noise-derived LDUs after a missed TDU — audio should be suppressed.
+            if(mConsecutiveDuidCorrections > 0)
+            {
+                message.setDuidCorrected(true);
+            }
             broadcast(message);
         }
         else

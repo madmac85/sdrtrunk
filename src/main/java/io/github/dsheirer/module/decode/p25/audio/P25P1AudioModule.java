@@ -279,6 +279,34 @@ public class P25P1AudioModule extends ImbeAudioModule
     {
         if(!mEncryptedCall)
         {
+            // Suppress audio for DUID-corrected LDUs — these contain noise, not voice.
+            // Apply a rapid fade-out using the last good frame to avoid abrupt transitions.
+            if(ldu.isDuidCorrected())
+            {
+                for(byte[] frame : ldu.getIMBEFrames())
+                {
+                    mTotalFrameCount++;
+                    mConsecutiveGatedFrames++;
+
+                    if(mLastGoodFrame != null && mConsecutiveGatedFrames <= 2)
+                    {
+                        // Fade out over 2 frames (40ms) for smooth transition
+                        float fade = 1.0f - (float)mConsecutiveGatedFrames / 2.0f;
+                        float[] faded = mLastGoodFrame.clone();
+                        for(int i = 0; i < faded.length; i++)
+                        {
+                            faded[i] *= fade;
+                        }
+                        addAudio(mGain.apply(faded));
+                    }
+                    else
+                    {
+                        addAudio(mGain.apply(new float[FRAME_SAMPLE_COUNT]));
+                    }
+                }
+                return;
+            }
+
             for(byte[] frame : ldu.getIMBEFrames())
             {
                 mTotalFrameCount++;
