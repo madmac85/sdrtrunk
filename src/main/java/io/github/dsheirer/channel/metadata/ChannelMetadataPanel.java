@@ -549,7 +549,44 @@ public class ChannelMetadataPanel extends JPanel implements ListSelectionListene
 
         if(tuner != null)
         {
-            discoveredTunerModel.broadcast(new TunerEvent(tuner, TunerEvent.Event.REQUEST_MAIN_SPECTRAL_DISPLAY));
+            // Determine the channel frequency to center on
+            long channelFrequency = 0;
+
+            if(sourceConfig instanceof SourceConfigTuner)
+            {
+                channelFrequency = ((SourceConfigTuner)sourceConfig).getFrequency();
+            }
+            else if(sourceConfig instanceof SourceConfigTunerMultipleFrequency)
+            {
+                List<Long> frequencies = ((SourceConfigTunerMultipleFrequency)sourceConfig).getFrequencies();
+
+                if(frequencies != null && !frequencies.isEmpty())
+                {
+                    channelFrequency = frequencies.get(0);
+                }
+            }
+
+            // Fall back to the live tuner channel source frequency if config frequency is 0
+            if(channelFrequency == 0)
+            {
+                ProcessingChain pc = mChannelProcessingManager.getProcessingChain(channel);
+
+                if(pc != null && pc.getSource() instanceof TunerChannelSource)
+                {
+                    channelFrequency = ((TunerChannelSource)pc.getSource()).getFrequency();
+                }
+            }
+
+            if(channelFrequency > 0)
+            {
+                discoveredTunerModel.broadcast(new TunerEvent(tuner,
+                    TunerEvent.Event.REQUEST_MAIN_SPECTRAL_DISPLAY, channelFrequency));
+            }
+            else
+            {
+                discoveredTunerModel.broadcast(new TunerEvent(tuner,
+                    TunerEvent.Event.REQUEST_MAIN_SPECTRAL_DISPLAY));
+            }
         }
         else
         {

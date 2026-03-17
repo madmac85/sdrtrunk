@@ -190,26 +190,25 @@ public abstract class AbstractAudioModule extends Module implements IAudioSegmen
     /**
      * Sets the mute state for this audio module.  When muted, audio segments produced by this module
      * will have their monitor priority set to DO_NOT_MONITOR, causing the audio playback manager to
-     * skip playback.  Immediately affects the current audio segment if one exists.
+     * skip playback.
+     *
+     * When muting, the current audio segment is force-closed (completed) so that any segment already
+     * playing in the audio channel is immediately stopped.  New segments created afterward will inherit
+     * the DO_NOT_MONITOR priority.
+     *
+     * When unmuting, the mute flag is cleared so that the next audio segment will use the normal priority.
+     *
      * @param muted true to mute, false to unmute
      */
     public void setMuted(boolean muted)
     {
         mMuted = muted;
 
-        synchronized(this)
+        if(muted)
         {
-            if(mAudioSegment != null)
-            {
-                if(muted)
-                {
-                    mAudioSegment.monitorPriorityProperty().set(Priority.DO_NOT_MONITOR);
-                }
-                else
-                {
-                    mAudioSegment.monitorPriorityProperty().set(Priority.DEFAULT_PRIORITY);
-                }
-            }
+            //Force close the current segment so AudioChannel stops playing it immediately.
+            //The next segment created via getAudioSegment() will have DO_NOT_MONITOR set.
+            closeAudioSegment();
         }
     }
 
