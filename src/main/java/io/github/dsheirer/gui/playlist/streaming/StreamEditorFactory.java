@@ -40,6 +40,8 @@ public class StreamEditorFactory
                 return new BroadcastifyStreamEditor(playlistManager);
             case RDIOSCANNER_CALL:
                 return new RdioScannerEditor(playlistManager);
+            case THINLINE_RADIO:
+                return new ThinLineRadioEditor(playlistManager);
             case OPENMHZ:
                 return new OpenMHzEditor(playlistManager);
             case BROADCASTIFY_CALL:
@@ -52,6 +54,10 @@ public class StreamEditorFactory
                 return new ShoutcastV1StreamEditor(playlistManager);
             case SHOUTCAST_V2:
                 return new ShoutcastV2StreamEditor(playlistManager);
+            case ZELLO_WORK:
+                return new ZelloEditor(playlistManager);
+            case ZELLO:
+                return new ZelloConsumerEditor(playlistManager);
             default:
                 return new UnknownStreamEditor(playlistManager);
         }
