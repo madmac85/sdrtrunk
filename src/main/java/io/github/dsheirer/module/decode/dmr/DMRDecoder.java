@@ -32,6 +32,7 @@ import io.github.dsheirer.dsp.squelch.PowerMonitor;
 import io.github.dsheirer.message.IMessage;
 import io.github.dsheirer.message.SyncLossMessage;
 import io.github.dsheirer.module.carrier.CarrierOffsetProcessor;
+import io.github.dsheirer.module.carrier.DMRCarrierOffsetProcessor;
 import io.github.dsheirer.module.decode.DecoderType;
 import io.github.dsheirer.module.decode.FeedbackDecoder;
 import io.github.dsheirer.module.decode.dmr.audio.DMRAudioModule;
@@ -102,6 +103,7 @@ public class DMRDecoder extends FeedbackDecoder implements IByteBufferProvider, 
     private RealFIRFilter mRRCFilterQ;
     private final PowerMonitor mPowerMonitor = new PowerMonitor();
     private final CarrierOffsetProcessor mCarrierOffsetProcessor = new CarrierOffsetProcessor();
+    private final DMRCarrierOffsetProcessor mDMRCarrierOffsetProcessor = new DMRCarrierOffsetProcessor();
 
     /**
      * Constructs an instance
@@ -142,6 +144,7 @@ public class DMRDecoder extends FeedbackDecoder implements IByteBufferProvider, 
 
         mPowerMonitor.setSampleRate((int)sampleRate);
         mCarrierOffsetProcessor.setSampleRate(sampleRate);
+        mDMRCarrierOffsetProcessor.setSampleRate(sampleRate);
 
         mIBasebandFilter = FilterFactory.getRealFilter(getBasebandFilter(sampleRate));
         mQBasebandFilter = FilterFactory.getRealFilter(getBasebandFilter(sampleRate));
@@ -202,15 +205,33 @@ public class DMRDecoder extends FeedbackDecoder implements IByteBufferProvider, 
         float[] demodulated = mDemodulator.demodulate(i, q);
         mSymbolProcessor.receive(demodulated);
 
-        //Estimate carrier offset and broadcast at each update. This value is used in the channel spectral display,
-        // and it's also processed by the tuner's PPM error monitor to auto-adjust the tuner PPM value.
-        if(mCarrierOffsetProcessor.process(samples))
+        //Estimate carrier offset using the DMR-specific 4-FSK outer symbol midpoint method.
+        //This finds both outer symbol peaks (±1944 Hz) and takes their midpoint as the true
+        //carrier center, canceling out symbol deviation and measuring only the actual tuner offset.
+        if(mDMRCarrierOffsetProcessor.process(samples))
         {
-            //Tuner PPM Monitor - negate the value to indicate channel error from tuner's PPM that's causing the offset
-            mPowerMonitor.broadcast(SourceEvent.frequencyErrorMeasurement(-mCarrierOffsetProcessor.getEstimatedOffset()));
+            if(mDMRCarrierOffsetProcessor.isConfident())
+            {
+                //Tuner PPM Monitor - outer symbol midpoint is a valid carrier offset measurement
+                mPowerMonitor.broadcast(SourceEvent.frequencyErrorMeasurement(-mDMRCarrierOffsetProcessor.getEstimatedOffset()));
+            }
 
-            //Channel spectral display - when there's a carrier send the estimate, otherwise send a zero to cause the
-            //display to blank the carrier offset measurement indicator line
+            if(mDMRCarrierOffsetProcessor.hasCarrier())
+            {
+                //Channel spectral display - show carrier offset when outer symbols are visible
+                mPowerMonitor.broadcast(SourceEvent.carrierOffsetMeasurement(mDMRCarrierOffsetProcessor.getEstimatedOffset()));
+            }
+            else
+            {
+                //No signal - blank the display indicator
+                mPowerMonitor.broadcast(SourceEvent.carrierOffsetMeasurement(0));
+            }
+        }
+
+        //Also run the original single-carrier processor for the spectral display's carrier line
+        //when DMRCarrierOffsetProcessor does not have a lock yet.
+        if(!mDMRCarrierOffsetProcessor.hasCarrier() && mCarrierOffsetProcessor.process(samples))
+        {
             if(mCarrierOffsetProcessor.hasCarrier())
             {
                 mPowerMonitor.broadcast(SourceEvent.carrierOffsetMeasurement(mCarrierOffsetProcessor.getEstimatedOffset()));
@@ -342,6 +363,7 @@ public class DMRDecoder extends FeedbackDecoder implements IByteBufferProvider, 
                     break;
                 case NOTIFICATION_FREQUENCY_CORRECTION_CHANGE:
                     mCarrierOffsetProcessor.reset();
+                    mDMRCarrierOffsetProcessor.reset();
                     break;
             }
         }

@@ -57,6 +57,15 @@ public class CarrierOffsetProcessor
     private long mLastCalculationTimestamp = 0;
 
     /**
+     * Count of high-quality measurements successfully added to mOffsetAverage.
+     * Used by isConfident() to gate PPM error reporting — only report when enough
+     * stable, high-SNR measurements have accumulated to produce a trustworthy estimate.
+     * The constructor value of FloatAveragingBuffer(10, 3) suggests 3 is the minimum
+     * useful fill; we require at least that many before reporting PPM errors.
+     */
+    private int mHighQualityMeasurementCount = 0;
+
+    /**
      * Constructs an instance.
      */
     public CarrierOffsetProcessor()
@@ -85,6 +94,7 @@ public class CarrierOffsetProcessor
         mMeasurementCount = 0;
         mLastCalculationTimestamp = 0;
         mEstimatedOffset = 0;
+        mHighQualityMeasurementCount = 0;
         mAveragingBuffer.reset();
         mStandardDeviation.clear();
         mOffsetAverage.reset();
@@ -109,6 +119,34 @@ public class CarrierOffsetProcessor
     public boolean hasCarrier()
     {
         return mCarrierOffset != Float.MAX_VALUE;
+    }
+
+    /**
+     * Indicates if the carrier offset estimate is confident enough to use for tuner PPM correction.
+     *
+     * Unlike hasCarrier() which only checks the last FFT result, this requires that at least
+     * MEASUREMENT_COUNT_THRESHOLD high-quality (>15 dB SNR, std dev < 5 bins) measurement sequences
+     * have been accumulated into the offset averaging buffer. This prevents early, unstable estimates
+     * from being reported as PPM errors and corrupting the tuner correction for all channels.
+     *
+     * Use this instead of hasCarrier() when deciding whether to broadcast a frequencyErrorMeasurement.
+     *
+     * @return true if enough stable measurements have been accumulated to trust the offset estimate.
+     */
+    /**
+     * Minimum number of high-quality measurement sequences required before isConfident() returns true.
+     * Each sequence requires MEASUREMENT_COUNT_THRESHOLD (5) consecutive high-SNR FFT windows, so
+     * CONFIDENCE_THRESHOLD sequences = 5 * CONFIDENCE_THRESHOLD consecutive qualifying windows.
+     * At ~19 kHz sample rate, 128 samples per window ≈ 6.7ms per window, so:
+     *   10 sequences * 5 windows = 50 windows ≈ 335ms of continuous qualifying signal.
+     * This is long enough to reject brief DMR bursts or transient signal conditions,
+     * while still being responsive enough for legitimate carrier correction.
+     */
+    private static final int CONFIDENCE_THRESHOLD = 10;
+
+    public boolean isConfident()
+    {
+        return mHighQualityMeasurementCount >= CONFIDENCE_THRESHOLD;
     }
 
     /**
@@ -145,6 +183,7 @@ public class CarrierOffsetProcessor
                     if(mStandardDeviation.getResult() < 5.0)
                     {
                         mOffsetAverage.add(mAveragingBuffer.getAverage());
+                        mHighQualityMeasurementCount++;
                         mLastCalculationTimestamp = samples.timestamp();
 
                         //Set the buffer offset to the sample length to exit the loop

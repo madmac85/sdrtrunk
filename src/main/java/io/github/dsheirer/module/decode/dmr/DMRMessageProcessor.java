@@ -18,6 +18,8 @@
  */
 package io.github.dsheirer.module.decode.dmr;
 
+import io.github.dsheirer.module.decode.dmr.channel.DMRAbsoluteChannel;
+import io.github.dsheirer.module.decode.dmr.message.data.csbk.standard.announcement.AnnounceChannelFrequency;
 import io.github.dsheirer.edac.CRCDMR;
 import io.github.dsheirer.identifier.Identifier;
 import io.github.dsheirer.message.IMessage;
@@ -177,6 +179,12 @@ public class DMRMessageProcessor implements Listener<IMessage>
 
         //Enrich messages that carry DMR Logical Channel Numbers with LCN to frequency mappings
         enrich(message);
+
+        //If this is an AnnounceChannelFrequency MBC CSBK, capture the OTA LCN-to-frequency mapping
+        if(message instanceof AnnounceChannelFrequency acf && acf.isValid() && acf.hasAbsoluteChannelParameters())
+        {
+            updateTimeslotFrequency(acf.getAbsoluteChannelParameters().getChannel());
+        }
 
         //Now that the message has been (potentially) enriched, dispatch it to the modules
         dispatch(message);
@@ -352,5 +360,32 @@ public class DMRMessageProcessor implements Listener<IMessage>
     {
         mMessageListener = null;
         mPacketSequenceAssembler.setMessageListener(null);
+    }
+
+    /**
+     * Dynamically adds or updates a timeslot frequency mapping discovered over the air (e.g. from an
+     * AnnounceChannelFrequency MBC CSBK).  Only adds entries that do not already exist so that user-configured
+     * playlist values take precedence over OTA-discovered values.
+     *
+     * @param channel DMRAbsoluteChannel carrying a known downlink frequency and LCN
+     */
+    public void updateTimeslotFrequency(DMRAbsoluteChannel channel)
+    {
+        if(channel == null || channel.getDownlinkFrequency() <= 0)
+        {
+            return;
+        }
+
+        int lcn = channel.getChannelNumber();
+
+        if(!mTimeslotFrequencyMap.containsKey(lcn))
+        {
+            TimeslotFrequency tf = new TimeslotFrequency();
+            tf.setNumber(lcn);
+            tf.setDownlinkFrequency(channel.getDownlinkFrequency());
+            tf.setUplinkFrequency(channel.getUplinkFrequency());
+            mTimeslotFrequencyMap.put(lcn, tf);
+            mLog.debug("OTA LCN-to-frequency discovered: LCN={} downlink={}Hz", lcn, channel.getDownlinkFrequency());
+        }
     }
 }

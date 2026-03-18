@@ -35,6 +35,25 @@ public class FrequencyErrorCorrectionManager
     private static final double FREQUENCY_CORRECTION_ERROR_THRESHOLD = 0.4;
     private static final long AUTO_CORRECTION_OBSERVATION_PERIOD_MILLISECONDS = 30 * 1000; //30 seconds
     private static final long INITIAL_AUTO_CORRECTION_OBSERVATION_PERIOD_MILLISECONDS = 5 * 1000; //5 seconds
+
+    /**
+     * Maximum PPM deviation allowed from the established baseline before a measurement is rejected as
+     * likely noise. This prevents a poorly-locked decoder (e.g. DMR without carrier lock) from reporting
+     * wildly incorrect frequency errors that corrupt the PPM correction for all channels on the tuner.
+     *
+     * 10 PPM is a generous window — real crystal drift moves slowly (<<1 PPM/minute), so any measurement
+     * more than 10 PPM away from the current established correction is almost certainly noise.
+     * Set to Double.MAX_VALUE to disable this sanity check.
+     */
+    private static final double SANITY_CLAMP_PPM = 10.0;
+
+    /**
+     * Exponential moving average of accepted PPM corrections. Used as the baseline for sanity checking
+     * incoming measurements. Initialized to NaN to indicate no baseline has been established yet
+     * (all measurements accepted until the first correction is applied).
+     */
+    private double mBaselinePPM = Double.NaN;
+
     private long mObservationPeriodStart;
     private double mPPMRequired;
     private boolean mEnabled = true;
@@ -82,6 +101,8 @@ public class FrequencyErrorCorrectionManager
     {
         mObservationPeriodStart = 0;
         mPPMRequired = 0;
+        // Note: mBaselinePPM is intentionally NOT reset here — the baseline should persist
+        // across correction cycles so sanity checking remains effective after each correction.
     }
 
     /**
@@ -98,6 +119,17 @@ public class FrequencyErrorCorrectionManager
             {
                 mLog.info("Auto-Correcting Tuner PPM to [" + mDecimalFormat.format(frequencyCorrection) + "]");
                 mTunerController.setFrequencyCorrection(frequencyCorrection);
+                // Update the baseline with this accepted correction value using a slow EMA.
+                // This allows the baseline to track legitimate long-term drift while still
+                // rejecting sudden large jumps from poorly-locked decoders.
+                if(Double.isNaN(mBaselinePPM))
+                {
+                    mBaselinePPM = frequencyCorrection;
+                }
+                else
+                {
+                    mBaselinePPM = mBaselinePPM * 0.8 + frequencyCorrection * 0.2;
+                }
                 reset();
             }
             catch(SourceException se)
@@ -112,6 +144,17 @@ public class FrequencyErrorCorrectionManager
      */
     public void updatePPM(double ppm)
     {
+        // Sanity check: reject measurements that deviate too far from the established baseline.
+        // This is a secondary defence against poorly-locked decoders reporting garbage PPM values
+        // that would corrupt the correction for all channels on this tuner.
+        // The primary fix is in each decoder (gate on carrier lock), but this catches any future cases.
+        if(!Double.isNaN(mBaselinePPM) && Math.abs(ppm - mBaselinePPM) > SANITY_CLAMP_PPM)
+        {
+            mLog.debug("Rejecting PPM measurement [{} ppm] - deviates more than {} ppm from baseline [{} ppm]",
+                mDecimalFormat.format(ppm), SANITY_CLAMP_PPM, mDecimalFormat.format(mBaselinePPM));
+            return;
+        }
+
         if(ppm > FREQUENCY_CORRECTION_ERROR_THRESHOLD)
         {
             if(mObservationPeriodStart == 0)
