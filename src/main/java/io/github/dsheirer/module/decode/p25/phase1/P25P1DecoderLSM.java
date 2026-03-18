@@ -38,6 +38,8 @@ import io.github.dsheirer.sample.Listener;
 import io.github.dsheirer.sample.buffer.IByteBufferProvider;
 import io.github.dsheirer.sample.complex.ComplexSamples;
 import io.github.dsheirer.sample.complex.IComplexSamplesListener;
+import io.github.dsheirer.sample.complex.IQImbalanceCorrector;
+import io.github.dsheirer.sample.complex.NoiseBlanker;
 import io.github.dsheirer.source.ISourceEventListener;
 import io.github.dsheirer.source.ISourceEventProvider;
 import io.github.dsheirer.source.SourceEvent;
@@ -54,25 +56,67 @@ import org.slf4j.LoggerFactory;
 
 /**
  * APCO25 Phase 1 Linear Simulcast Modulation (LSM) decoder.  Decimates incoming sample buffers to as close as possible
- * to 25 kHz for ~5 samples per symbol.  Employs baseband and pulse shaping filters.  Incorporates an demodulator to
+ * to 25 kHz for ~5 samples per symbol.  Employs baseband and pulse shaping filters.  Incorporates a demodulator to
  * process complex baseband (I/Q) sample stream into soft symbols with soft sync detection and message framing. A
  * registered message listener receives the detected and framed messages.
  *
  * As a child of the FeedbackDecoder, this decoder provides periodic PLL measurements to the tuner for automatic PPM
  * correction.  It also provides a stream of demodulated soft symbols (in radians) for display to the user.
+ *
+ * IQ Imbalance Correction and Noise Blanking:
+ * An adaptive Gram-Schmidt IQ imbalance corrector runs at the top of the receive pipeline, before decimation and
+ * filtering, correcting gain and phase mismatches inherent in RTL-SDR hardware. Immediately after, an adaptive noise
+ * blanker detects and zeros short high-amplitude impulse spikes (USB noise, switching supplies, inter-dongle
+ * interference) before the decimation filters can smear them downstream. Both components reset on frequency change
+ * events to allow rapid re-convergence on the new channel. Diagnostic logging of both components is available at
+ * DEBUG level.
  */
-public class P25P1DecoderLSM extends FeedbackDecoder implements IByteBufferProvider, IComplexSamplesListener, ISourceEventListener,
-        ISourceEventProvider, Listener<ComplexSamples>
+public class P25P1DecoderLSM extends FeedbackDecoder implements IByteBufferProvider, IComplexSamplesListener,
+        ISourceEventListener, ISourceEventProvider, Listener<ComplexSamples>
 {
     private static final Logger LOGGER = LoggerFactory.getLogger(P25P1DecoderLSM.class);
     private static final DecimalFormat DECIMAL_FORMAT = new DecimalFormat("#.##");
     private static final Map<Double,float[]> BASEBAND_FILTERS = new HashMap<>();
     private static final int SYMBOL_RATE = 4800;
 
+    // How often to log IQ corrector and noise blanker diagnostics (every N sample buffers). Set to 0 to disable.
+    private static final int DIAGNOSTIC_LOG_INTERVAL = 1000;
+    private int mDiagnosticCounter = 0;
+
     private final P25P1DemodulatorLSM mDemodulator;
     private final P25P1MessageFramer mMessageFramer = new P25P1MessageFramer();
     private final P25P1MessageProcessor mMessageProcessor = new P25P1MessageProcessor();
+
+    /**
+     * Sets the allowed NACs for filtering at the message framer level.
+     * @param allowedNACs set of allowed NAC values, or null to accept all
+     */
+    public void setAllowedNACs(java.util.Set<Integer> allowedNACs)
+    {
+        mMessageFramer.setAllowedNACs(allowedNACs);
+    }
+
     private final PowerMonitor mPowerMonitor = new PowerMonitor();
+
+    /**
+     * Adaptive IQ imbalance corrector.
+     * Corrects per-channel I/Q path gain and phase mismatches introduced by the RTL-SDR tuner hardware,
+     * reducing the mirror image that degrades LSM symbol quality. Applied before decimation so all
+     * downstream processing benefits from the corrected samples.
+     * Reset on frequency/correction change events to allow rapid re-convergence.
+     */
+    private final IQImbalanceCorrector mIQImbalanceCorrector = new IQImbalanceCorrector();
+
+    /**
+     * Adaptive noise blanker.
+     * Detects and zeros short high-amplitude impulse spikes (USB noise, switching supplies,
+     * inter-dongle interference) before the decimation filters smear them downstream into the
+     * LSM demodulator. Applied after IQ correction at full channelized sample rate where impulses
+     * are sharpest and most reliably detected as single-sample events.
+     * Reset on frequency/correction change events alongside the IQ corrector.
+     */
+    private final NoiseBlanker mNoiseBlanker = new NoiseBlanker();
+
     private IRealDecimationFilter mDecimationFilterI;
     private IRealDecimationFilter mDecimationFilterQ;
     private IRealFilter mBasebandFilterI;
@@ -116,7 +160,6 @@ public class P25P1DecoderLSM extends FeedbackDecoder implements IByteBufferProvi
 
         //Identify decimation that gets as close to 4.0 Samples Per Symbol as possible (4800 x 4.0 = 19.2 kHz)
         while((sampleRate / decimation) >= 38400)
-//        while((sampleRate / decimation) > 50000)
         {
             decimation *= 2;
         }
@@ -142,34 +185,67 @@ public class P25P1DecoderLSM extends FeedbackDecoder implements IByteBufferProvi
         mBasebandFilterQ = FilterFactory.getRealFilter(getBasebandFilter(decimatedSampleRate));
         mDemodulator.setSamplesPerSymbol(decimatedSampleRate / (float)SYMBOL_RATE);
         mMessageFramer.setListener(mMessageProcessor);
+
+        // Reset IQ corrector and noise blanker on sample rate change so they re-converge cleanly
+        mIQImbalanceCorrector.reset();
+        mNoiseBlanker.reset();
     }
 
     /**
-     * Primary method for processing incoming complex sample buffers
+     * Primary method for processing incoming complex sample buffers.
+     *
+     * Pipeline order:
+     *   1. IQ imbalance correction  (corrects hardware I/Q path mismatches — before everything else)
+     *   2. Noise blanking           (zeros impulse spikes before decimation smears them)
+     *   3. Decimation               (reduces sample rate toward target ~19.2 kHz)
+     *   4. Power monitoring         (measures channel power on decimated samples)
+     *   5. Baseband filter          (low-pass, removes out-of-band energy)
+     *   6. Pulse shaping filter     (RRC matched filter)
+     *   7. LSM demodulation / symbol processing / message framing
+     *
      * @param samples containing channelized complex samples
      */
     @Override
     public void receive(ComplexSamples samples)
     {
-        //Update the message framer with the timestamp from the incoming sample buffer.
+        // Update the message framer with the timestamp from the incoming sample buffer.
         mMessageFramer.setTimestamp(samples.timestamp());
 
-        float[] i = samples.i();
-        float[] q = samples.q();
+        // Step 1: IQ imbalance correction — applied first, before decimation, so all downstream
+        // processing benefits from the corrected samples. Modifies I and Q arrays in-place.
+        samples.correct(mIQImbalanceCorrector);
 
-        i = mDecimationFilterI.decimateReal(i);
-        q = mDecimationFilterQ.decimateReal(q);
+        // Step 2: Noise blanking — detect and zero impulse spikes before decimation filters
+        // can smear them across multiple samples. Operates on corrected full-rate samples.
+        mNoiseBlanker.process(samples.i(), samples.q());
 
-        //Process buffer for power measurements
+        // Periodically log diagnostic state at DEBUG level
+        if(LOGGER.isDebugEnabled() && DIAGNOSTIC_LOG_INTERVAL > 0)
+        {
+            if(++mDiagnosticCounter >= DIAGNOSTIC_LOG_INTERVAL)
+            {
+                mDiagnosticCounter = 0;
+                LOGGER.debug("IQ Correction: {}", mIQImbalanceCorrector);
+                LOGGER.debug("Noise Blanker: {}", mNoiseBlanker);
+            }
+        }
+
+        // Step 3: Decimation
+        float[] i = mDecimationFilterI.decimateReal(samples.i());
+        float[] q = mDecimationFilterQ.decimateReal(samples.q());
+
+        // Step 4: Channel power measurement
         mPowerMonitor.process(i, q);
 
+        // Step 5: Baseband low-pass filter
         i = mBasebandFilterI.filter(i);
         q = mBasebandFilterQ.filter(q);
 
+        // Step 6: Pulse shaping (RRC matched filter)
         i = mPulseShapingFilterI.filter(i);
         q = mPulseShapingFilterQ.filter(q);
 
-        //Demodulate samples into symbols with timing, sync detection, and message framing.
+        // Step 7: Demodulate samples into symbols with timing, sync detection, and message framing.
         mDemodulator.process(i, q);
     }
 
@@ -187,8 +263,8 @@ public class P25P1DecoderLSM extends FeedbackDecoder implements IByteBufferProvi
                 .lowPassBuilder()
                 .sampleRate(sampleRate)
                 .passBandCutoff(7250)
-                .passBandAmplitude(1.0).passBandRipple(0.01) //.01
-                .stopBandAmplitude(0.0).stopBandStart(8000) //6500
+                .passBandAmplitude(1.0).passBandRipple(0.01)
+                .stopBandAmplitude(0.0).stopBandStart(8000)
                 .stopBandRipple(0.01).build();
 
         float[] coefficients = null;
@@ -212,7 +288,7 @@ public class P25P1DecoderLSM extends FeedbackDecoder implements IByteBufferProvi
     }
 
     /**
-     * Implements the IByteBufferProvider interface - delegates to the symbol processor
+     * Implements the IByteBufferProvider interface - delegates to the demodulator
      */
     @Override
     public void setBufferListener(Listener<ByteBuffer> listener)
@@ -221,7 +297,7 @@ public class P25P1DecoderLSM extends FeedbackDecoder implements IByteBufferProvi
     }
 
     /**
-     * Implements the IByteBufferProvider interface - delegates to the symbol processor
+     * Implements the IByteBufferProvider interface - delegates to the demodulator
      */
     @Override
     public void removeBufferListener(Listener<ByteBuffer> listener)
@@ -230,7 +306,7 @@ public class P25P1DecoderLSM extends FeedbackDecoder implements IByteBufferProvi
     }
 
     /**
-     * Implements the IByteBufferProvider interface - delegates to the symbol processor
+     * Implements the IByteBufferProvider interface - delegates to the demodulator
      */
     @Override
     public boolean hasBufferListeners()
@@ -284,6 +360,10 @@ public class P25P1DecoderLSM extends FeedbackDecoder implements IByteBufferProvi
             case NOTIFICATION_FREQUENCY_CHANGE:
             case NOTIFICATION_FREQUENCY_CORRECTION_CHANGE:
                 mDemodulator.resetPLL();
+                // Reset IQ corrector and noise blanker on retune — new frequency means new
+                // imbalance and noise characteristics; let both re-converge cleanly.
+                mIQImbalanceCorrector.reset();
+                mNoiseBlanker.reset();
                 break;
             case NOTIFICATION_SAMPLE_RATE_CHANGE:
                 setSampleRate(sourceEvent.getValue().doubleValue());
@@ -309,9 +389,7 @@ public class P25P1DecoderLSM extends FeedbackDecoder implements IByteBufferProvi
 //        String file = directory + "P25-S5-LSM-CCH-20250923_034304_460500000_CNYICC_Onondaga_Onondaga-CC_0_baseband.wav";
         String file = directory + "P25-S6-LSM-CCH-20251025_071546_460500000_CNYICC_Onondaga_Onondaga-CC_0_baseband.wav";
 
-
 //        String file = directory + "P25-S3-C4FM-20241225_040459_152517500_NYSEG_Onondaga_Control_30_baseband.wav";
-
 
         boolean autoReplay = false;
 
