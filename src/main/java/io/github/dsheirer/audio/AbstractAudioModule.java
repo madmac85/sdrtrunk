@@ -20,6 +20,7 @@
 package io.github.dsheirer.audio;
 
 import io.github.dsheirer.alias.AliasList;
+import io.github.dsheirer.alias.id.priority.Priority;
 import io.github.dsheirer.identifier.IdentifierUpdateListener;
 import io.github.dsheirer.identifier.IdentifierUpdateNotification;
 import io.github.dsheirer.identifier.MutableIdentifierCollection;
@@ -45,6 +46,7 @@ public abstract class AbstractAudioModule extends Module implements IAudioSegmen
     private AudioSegment mAudioSegment;
     private int mAudioSampleCount = 0;
     private boolean mRecordAudioOverride;
+    private volatile boolean mMuted;
     private int mTimeslot;
 
     /**
@@ -121,6 +123,11 @@ public abstract class AbstractAudioModule extends Module implements IAudioSegmen
                     mAudioSegment.recordAudioProperty().set(true);
                 }
 
+                if(mMuted)
+                {
+                    mAudioSegment.monitorPriorityProperty().set(Priority.DO_NOT_MONITOR);
+                }
+
                 if(mAudioSegmentListener != null)
                 {
                     mAudioSegment.incrementConsumerCount();
@@ -178,6 +185,51 @@ public abstract class AbstractAudioModule extends Module implements IAudioSegmen
                 }
             }
         }
+    }
+
+    /**
+     * Sets the mute state for this audio module.  When muted, audio segments produced by this module
+     * will have their monitor priority set to DO_NOT_MONITOR, causing the audio playback manager to
+     * skip playback.
+     *
+     * When muting, the current audio segment is force-closed (completed) so that any segment already
+     * playing in the audio channel is immediately stopped.  New segments created afterward will inherit
+     * the DO_NOT_MONITOR priority.
+     *
+     * When unmuting, the mute flag is cleared so that the next audio segment will use the normal priority.
+     *
+     * @param muted true to mute, false to unmute
+     */
+    public void setMuted(boolean muted)
+    {
+        mMuted = muted;
+
+        if(muted)
+        {
+            synchronized(this)
+            {
+                //Mark the current segment as DO_NOT_MONITOR so AudioPlaybackManager drops it
+                //on its next processing cycle, then close it so no more audio is added.
+                if(mAudioSegment != null)
+                {
+                    mAudioSegment.monitorPriorityProperty().set(Priority.DO_NOT_MONITOR);
+                }
+            }
+        }
+
+        //Close the current segment in both mute and unmute cases.
+        //On mute: stops the currently playing audio immediately.
+        //On unmute: discards the DO_NOT_MONITOR segment so the next addAudio() creates
+        //a fresh segment with normal priority that AudioPlaybackManager will play.
+        closeAudioSegment();
+    }
+
+    /**
+     * Indicates if this audio module is currently muted.
+     */
+    public boolean isMuted()
+    {
+        return mMuted;
     }
 
     /**
