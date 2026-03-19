@@ -360,6 +360,13 @@ public class P25P1DemodulatorC4FM
         {
             integral = (int) Math.floor(pointer);
             fractional = pointer - integral;
+
+            //Bounds check: ensure integral + 1 is within buffer to prevent ArrayIndexOutOfBoundsException
+            if(integral + 1 >= mBuffer.length)
+            {
+                return;
+            }
+
             softSymbol = mEqualizer.getEqualizedSymbol(mBuffer[integral], mBuffer[integral + 1], fractional, correction);
             symbol = toSymbol(softSymbol);
             resampledNIDSymbols[x] = symbol;
