@@ -52,8 +52,9 @@ public class CTCSSDetector
     /**
      * Number of consecutive detections required before reporting a match.
      * Prevents false triggers from transient energy.
+     * 2 blocks at ~75ms each = ~150ms detection latency (matches real radio behavior).
      */
-    private static final int CONFIRMATION_COUNT = 3;
+    private static final int CONFIRMATION_COUNT = 2;
 
     /**
      * Number of consecutive misses before declaring tone lost.

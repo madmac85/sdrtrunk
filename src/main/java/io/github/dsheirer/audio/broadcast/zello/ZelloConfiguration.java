@@ -24,6 +24,8 @@ import io.github.dsheirer.audio.broadcast.BroadcastConfiguration;
 import io.github.dsheirer.audio.broadcast.BroadcastFormat;
 import io.github.dsheirer.audio.broadcast.BroadcastServerType;
 import javafx.beans.binding.Bindings;
+import javafx.beans.property.IntegerProperty;
+import javafx.beans.property.SimpleIntegerProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 
@@ -45,6 +47,9 @@ public class ZelloConfiguration extends BroadcastConfiguration
     private StringProperty mNetworkName = new SimpleStringProperty();
     private StringProperty mChannel = new SimpleStringProperty();
     private StringProperty mUsername = new SimpleStringProperty();
+    private IntegerProperty mStreamGuardMs = new SimpleIntegerProperty(500);
+    private IntegerProperty mPauseTimeMs = new SimpleIntegerProperty(0);
+    private IntegerProperty mRelaxationTimeMs = new SimpleIntegerProperty(0);
 
     /**
      * Default constructor for Jackson XML deserialization
@@ -137,6 +142,66 @@ public class ZelloConfiguration extends BroadcastConfiguration
     }
 
     // ========================================================================
+    // Stream Guard Timeout (ms) — minimum gap between stop and next start
+    // ========================================================================
+
+    public IntegerProperty streamGuardMsProperty()
+    {
+        return mStreamGuardMs;
+    }
+
+    @JacksonXmlProperty(isAttribute = true, localName = "stream_guard_ms")
+    public int getStreamGuardMs()
+    {
+        return mStreamGuardMs.get();
+    }
+
+    public void setStreamGuardMs(int ms)
+    {
+        mStreamGuardMs.set(ms);
+    }
+
+    // ========================================================================
+    // Pause Time (ms) — delay between consecutive transmissions
+    // ========================================================================
+
+    public IntegerProperty pauseTimeMsProperty()
+    {
+        return mPauseTimeMs;
+    }
+
+    @JacksonXmlProperty(isAttribute = true, localName = "pause_time_ms")
+    public int getPauseTimeMs()
+    {
+        return mPauseTimeMs.get();
+    }
+
+    public void setPauseTimeMs(int ms)
+    {
+        mPauseTimeMs.set(ms);
+    }
+
+    // ========================================================================
+    // Relaxation Time (ms) — hold-over before ending transmission
+    // ========================================================================
+
+    public IntegerProperty relaxationTimeMsProperty()
+    {
+        return mRelaxationTimeMs;
+    }
+
+    @JacksonXmlProperty(isAttribute = true, localName = "relaxation_time_ms")
+    public int getRelaxationTimeMs()
+    {
+        return mRelaxationTimeMs.get();
+    }
+
+    public void setRelaxationTimeMs(int ms)
+    {
+        mRelaxationTimeMs.set(ms);
+    }
+
+    // ========================================================================
     // Helpers
     // ========================================================================
 
@@ -170,6 +235,9 @@ public class ZelloConfiguration extends BroadcastConfiguration
         copy.setChannel(getChannel());
         copy.setUsername(getUsername());
         copy.setPassword(getPassword());
+        copy.setStreamGuardMs(getStreamGuardMs());
+        copy.setPauseTimeMs(getPauseTimeMs());
+        copy.setRelaxationTimeMs(getRelaxationTimeMs());
         return copy;
     }
 }
