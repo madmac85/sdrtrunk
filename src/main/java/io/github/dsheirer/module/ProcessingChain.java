@@ -994,6 +994,14 @@ public class ProcessingChain implements Listener<ChannelEvent>
     }
 
     /**
+     * Adds listener to receive decoded messages from all decoder modules.
+     */
+    public void addMessageListener(Listener<IMessage> listener)
+    {
+        mMessageBroadcaster.addListener(listener);
+    }
+
+    /**
      * Adds listener to receive demodulated audio buffers from an modules that produce demodulated audio.
      */
     public void addDemodulatedAudioListener(Listener<float[]> listener)

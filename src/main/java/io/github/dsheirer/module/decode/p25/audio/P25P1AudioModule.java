@@ -29,6 +29,7 @@ import io.github.dsheirer.module.decode.p25.phase1.message.ldu.IMBEFrameDiagnost
 import io.github.dsheirer.module.decode.p25.phase1.message.ldu.LDU1Message;
 import io.github.dsheirer.module.decode.p25.phase1.message.ldu.LDU2Message;
 import io.github.dsheirer.module.decode.p25.phase1.message.ldu.LDUMessage;
+import io.github.dsheirer.module.decode.p25.phase1.P25PipelineDiagnostics;
 import io.github.dsheirer.preference.UserPreferences;
 import io.github.dsheirer.sample.Listener;
 import java.util.ArrayList;
@@ -169,6 +170,11 @@ public class P25P1AudioModule extends ImbeAudioModule
             {
                 if(message instanceof LDUMessage ldu)
                 {
+                    if(P25PipelineDiagnostics.isEnabled())
+                    {
+                        P25PipelineDiagnostics.log("AUDIO", "AUDIO_MOD", "LDU_PROCESS",
+                            ldu.getDUID().name() + " encrypted=" + mEncryptedCall + " duidCorrected=" + ldu.isDuidCorrected());
+                    }
                     // Fix B: Continuously monitor encryption state — if a valid LDU2 says unencrypted,
                     // immediately flip back (handles single corrupted LDU2 that falsely set encrypted)
                     if(ldu instanceof LDU2Message ldu2 && ldu2.getEncryptionSyncParameters().isValid())
@@ -188,10 +194,22 @@ public class P25P1AudioModule extends ImbeAudioModule
             }
             else
             {
+                if(P25PipelineDiagnostics.isEnabled() && (message instanceof LDUMessage || message instanceof HDUMessage))
+                {
+                    P25PipelineDiagnostics.log("AUDIO", "AUDIO_MOD", "ENCRYPT_PENDING",
+                        message.getClass().getSimpleName() + " cached=" + mCachedLDUMessages.size() +
+                        " established=" + mEncryptedCallStateEstablished);
+                }
+
                 if(message instanceof HDUMessage hdu && hdu.isValid())
                 {
                     mEncryptedCallStateEstablished = true;
                     mEncryptedCall = hdu.getHeaderData().isEncryptedAudio();
+                    if(P25PipelineDiagnostics.isEnabled())
+                    {
+                        P25PipelineDiagnostics.log("AUDIO", "AUDIO_MOD", "HDU_ENCRYPT_SET",
+                            "encrypted=" + mEncryptedCall);
+                    }
                 }
                 else if(message instanceof LDU1Message ldu1)
                 {
@@ -434,6 +452,11 @@ public class P25P1AudioModule extends ImbeAudioModule
         @Override
         public void receive(SquelchStateEvent event)
         {
+            if(P25PipelineDiagnostics.isEnabled())
+            {
+                P25PipelineDiagnostics.log("AUDIO", "SQUELCH_RECV", event.getSquelchState().name(),
+                    "encryptEstablished=" + mEncryptedCallStateEstablished + " cached=" + mCachedLDUMessages.size());
+            }
             if(event.getSquelchState() == SquelchState.SQUELCH)
             {
                 closeAudioSegment();

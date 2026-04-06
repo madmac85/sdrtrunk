@@ -690,10 +690,55 @@ tasks.register('runDecodeScore', JavaExec) {
     if(project.hasProperty('cmaShiftMs')) {
         argsList.addAll(['--cma-shift-ms', project.property('cmaShiftMs')])
     }
+    if(project.hasProperty('verbose')) {
+        argsList.add('--verbose')
+    }
     if(project.hasProperty('sysprop')) {
         project.property('sysprop').split(',').each { prop ->
             jvmArgs += "-D${prop}"
         }
+    }
+    args = argsList
+}
+
+/**
+ * Pipeline replay diagnostic: feeds baseband WAV through the FULL live ProcessingChain
+ * (DecoderState, StateMachine, SquelchController, AudioModule) to diagnose live-only bugs.
+ * Usage: ./gradlew runPipelineReplay -Psamples=path -Pfreq=154175000 -Pnac=2311 [-Pmod=C4FM] [-Pjmbe=path]
+ */
+tasks.register('runPipelineReplay', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'io.github.dsheirer.module.decode.p25.phase1.PipelineReplayTest'
+    if(os.isWindows()) {
+        jvmArgs = jvmArgsWindows
+    } else {
+        jvmArgs = jvmArgsLinux
+    }
+    def argsList = []
+    if(project.hasProperty('samples')) {
+        argsList.addAll(['--samples', project.property('samples')])
+    }
+    if(project.hasProperty('freq')) {
+        argsList.addAll(['--freq', project.property('freq')])
+    }
+    if(project.hasProperty('nac')) {
+        argsList.addAll(['--nac', project.property('nac')])
+    }
+    if(project.hasProperty('mod')) {
+        argsList.addAll(['--mod', project.property('mod')])
+    }
+    if(project.hasProperty('jmbe')) {
+        argsList.addAll(['--jmbe', project.property('jmbe')])
+    }
+    if(project.hasProperty('maxFiles')) {
+        argsList.addAll(['--max-files', project.property('maxFiles')])
+    }
+    if(project.hasProperty('continuous')) {
+        argsList.add('--continuous')
+    }
+    if(project.hasProperty('diag')) {
+        jvmArgs += '-Dp25.diag=true'
     }
     args = argsList
 }

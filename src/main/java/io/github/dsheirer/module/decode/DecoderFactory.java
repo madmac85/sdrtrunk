@@ -283,6 +283,7 @@ public class DecoderFactory
                     if(p1.hasConfiguredNAC())
                     {
                         c4fmDecoder.setConfiguredNAC(p1.getConfiguredNAC());
+                        c4fmDecoder.getMessageFramer().setMaxBchErrors(p1.getMaxBchErrors());
                     }
                     modules.add(c4fmDecoder);
                     break;
@@ -296,6 +297,7 @@ public class DecoderFactory
                     if(p1.hasConfiguredNAC())
                     {
                         c4fmv2Decoder.setConfiguredNAC(p1.getConfiguredNAC());
+                        c4fmv2Decoder.getMessageFramer().setMaxBchErrors(p1.getMaxBchErrors());
                     }
                     modules.add(c4fmv2Decoder);
                     break;
@@ -304,6 +306,7 @@ public class DecoderFactory
                     if(p1.hasConfiguredNAC())
                     {
                         lsmDecoder.setConfiguredNAC(p1.getConfiguredNAC());
+                        lsmDecoder.getMessageFramer().setMaxBchErrors(p1.getMaxBchErrors());
                     }
                     modules.add(lsmDecoder);
                     break;

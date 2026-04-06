@@ -22,6 +22,7 @@ package io.github.dsheirer.channel.state;
 import io.github.dsheirer.controller.channel.Channel;
 import io.github.dsheirer.identifier.IdentifierUpdateNotification;
 import io.github.dsheirer.identifier.decoder.ChannelStateIdentifier;
+import io.github.dsheirer.module.decode.p25.phase1.P25PipelineDiagnostics;
 import io.github.dsheirer.sample.Listener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -130,6 +131,12 @@ public class StateMachine
         }
         else if(mState.canChangeTo(state))
         {
+            if(P25PipelineDiagnostics.isEnabled())
+            {
+                P25PipelineDiagnostics.log("STATE_MACHINE", "STATE_TRANS", mState + "→" + state,
+                    "thread=" + Thread.currentThread().getName());
+            }
+
             if(mActiveStates.contains(state))
             {
                 updateFadeTimeout();

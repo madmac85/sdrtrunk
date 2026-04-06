@@ -107,6 +107,8 @@ public class P25P1DecoderLSM extends FeedbackDecoder implements IByteBufferProvi
         mMessageFramer.setConfiguredNAC(nac);
     }
 
+    public P25P1MessageFramer getMessageFramer() { return mMessageFramer; }
+
     /**
      * Sets the sample rate and configures internal components.
      * @param sampleRate of the channel to decode

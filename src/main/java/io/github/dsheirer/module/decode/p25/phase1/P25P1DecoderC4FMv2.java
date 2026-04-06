@@ -157,6 +157,8 @@ public class P25P1DecoderC4FMv2 extends FeedbackDecoder implements IByteBufferPr
         mMessageFramer.setConfiguredNAC(nac);
     }
 
+    public P25P1MessageFramer getMessageFramer() { return mMessageFramer; }
+
     /**
      * Sets the sample rate and configures internal decoder components.
      * @param sampleRate of the channel to decode

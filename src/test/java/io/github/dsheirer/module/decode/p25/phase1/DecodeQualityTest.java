@@ -24,7 +24,10 @@ import io.github.dsheirer.audio.convert.MP3Setting;
 import io.github.dsheirer.message.IMessage;
 import io.github.dsheirer.message.SyncLossMessage;
 import io.github.dsheirer.module.decode.p25.phase1.message.P25P1Message;
+import io.github.dsheirer.module.decode.p25.phase1.message.hdu.HDUMessage;
 import io.github.dsheirer.module.decode.p25.phase1.message.ldu.IMBEFrameDiagnostic;
+import io.github.dsheirer.module.decode.p25.phase1.message.ldu.LDU1Message;
+import io.github.dsheirer.module.decode.p25.phase1.message.ldu.LDU2Message;
 import io.github.dsheirer.module.decode.p25.phase1.message.ldu.LDUMessage;
 import io.github.dsheirer.sample.Listener;
 import io.github.dsheirer.sample.complex.ComplexSamples;
@@ -91,6 +94,7 @@ public class DecodeQualityTest
         float cmaAcqMu = 0.0f; // CMA acquisition mu (0 = system property fallback)
         float cmaTrkMu = 0.0f; // CMA tracking mu (0 = system property fallback)
         int cmaShiftMs = 0;    // CMA gear-shift timing in ms (0 = system property fallback)
+        boolean verbose = false; // Print every message with full toString()
 
         for(int i = 0; i < args.length; i++)
         {
@@ -104,6 +108,7 @@ public class DecodeQualityTest
                 case "--force-mod" -> forceMod = args[++i];
                 case "--force-nac" -> forceNac = Integer.parseInt(args[++i]);
                 case "--diag" -> diagEnabled = true;
+                case "--verbose" -> verbose = true;
                 case "--max-bch-errors" -> maxBchErrors = Integer.parseInt(args[++i]);
                 case "--max-imbe-errors" -> maxImbeErrors = Integer.parseInt(args[++i]);
                 case "--segment-gap" -> segmentGapMs = Integer.parseInt(args[++i]);
@@ -163,7 +168,7 @@ public class DecodeQualityTest
             System.out.printf("  Channel: %s | Mod: %s | NAC: %d | Tuner: %s%n", channelName, modulation, nac, tuner);
 
             String[] framerDiagHolder = diagnosticMode ? new String[]{""} : null;
-            DecodeResult result = runDecode(bbFile, modulation, nac, diagEnabled || diagnosticMode, maxBchErrors, cmaAcqMu, cmaTrkMu, cmaShiftMs, framerDiagHolder);
+            DecodeResult result = runDecode(bbFile, modulation, nac, diagEnabled || diagnosticMode, maxBchErrors, cmaAcqMu, cmaTrkMu, cmaShiftMs, framerDiagHolder, verbose);
 
             int audioSegments = 0;
             double audioSeconds = 0;
@@ -352,10 +357,10 @@ public class DecodeQualityTest
 
     private static DecodeResult runDecode(File file, String modulation, int nac, boolean diagEnabled, int maxBchErrors, float cmaAcqMu, float cmaTrkMu, int cmaShiftMs)
     {
-        return runDecode(file, modulation, nac, diagEnabled, maxBchErrors, cmaAcqMu, cmaTrkMu, cmaShiftMs, null);
+        return runDecode(file, modulation, nac, diagEnabled, maxBchErrors, cmaAcqMu, cmaTrkMu, cmaShiftMs, null, false);
     }
 
-    private static DecodeResult runDecode(File file, String modulation, int nac, boolean diagEnabled, int maxBchErrors, float cmaAcqMu, float cmaTrkMu, int cmaShiftMs, String[] framerDiagHolder)
+    private static DecodeResult runDecode(File file, String modulation, int nac, boolean diagEnabled, int maxBchErrors, float cmaAcqMu, float cmaTrkMu, int cmaShiftMs, String[] framerDiagHolder, boolean verbose)
     {
         int[] ldu = {0}, valid = {0}, total = {0}, bitErr = {0}, syncLoss = {0};
         double[] signalSeconds = {0}, totalFileSeconds = {0};
@@ -368,10 +373,18 @@ public class DecodeQualityTest
         // Error distribution: [0]=0 errors, [1]=1-3 errors, [2]=4-6 errors, [3]=7-10 errors, [4]=11+ errors
         int[] diagErrorDist = new int[5];
 
+        // LCW/ESP validity tracking — measures whether the live DecoderState would produce CALL events
+        int[] ldu1Total = {0}, ldu1ValidLcw = {0}, ldu2Total = {0}, ldu2ValidEsp = {0};
+        int[] hduTotal = {0}, hduValidHeader = {0};
+
         Listener<IMessage> listener = msg -> {
             if(msg instanceof SyncLossMessage) { syncLoss[0]++; return; }
             if(msg instanceof P25P1Message p)
             {
+                if(verbose)
+                {
+                    System.out.printf("  [%d] %s%n", total[0] + 1, p);
+                }
                 total[0]++;
                 var duid = p.getDUID();
                 duidCounts.computeIfAbsent(duid.name(), k -> new int[]{0, 0});
@@ -407,6 +420,26 @@ public class DecodeQualityTest
                         }
                     }
                 }
+                // Track LCW/ESP validity for live decoder state analysis
+                if(p instanceof LDU1Message ldu1Msg)
+                {
+                    ldu1Total[0]++;
+                    if(ldu1Msg.getLinkControlWord() != null && ldu1Msg.getLinkControlWord().isValid())
+                        ldu1ValidLcw[0]++;
+                }
+                else if(p instanceof LDU2Message ldu2Msg)
+                {
+                    ldu2Total[0]++;
+                    if(ldu2Msg.getEncryptionSyncParameters() != null && ldu2Msg.getEncryptionSyncParameters().isValid())
+                        ldu2ValidEsp[0]++;
+                }
+                else if(p instanceof HDUMessage hduMsg)
+                {
+                    hduTotal[0]++;
+                    if(hduMsg.getHeaderData() != null && hduMsg.getHeaderData().isValid())
+                        hduValidHeader[0]++;
+                }
+
                 String nacStr = String.valueOf(p.getNAC());
                 nacCounts.computeIfAbsent(nacStr, k -> new int[]{0})[0]++;
                 if(p.getMessage() != null) bitErr[0] += p.getMessage().getCorrectedBitCount();
@@ -478,6 +511,20 @@ public class DecodeQualityTest
                 .sorted((a, b) -> Integer.compare(b.getValue()[0], a.getValue()[0]))
                 .forEach(e -> System.out.printf("%s(×%d) ", e.getKey(), e.getValue()[0]));
             System.out.println();
+        }
+
+        // Print LCW/ESP validity — shows whether live DecoderState would produce CALL events
+        if(ldu1Total[0] > 0 || ldu2Total[0] > 0 || hduTotal[0] > 0)
+        {
+            System.out.printf("  Live decode: HDU %d/%d valid | LDU1-LCW %d/%d valid (%.0f%%) | LDU2-ESP %d/%d valid (%.0f%%)%n",
+                hduValidHeader[0], hduTotal[0],
+                ldu1ValidLcw[0], ldu1Total[0], ldu1Total[0] > 0 ? 100.0 * ldu1ValidLcw[0] / ldu1Total[0] : 0,
+                ldu2ValidEsp[0], ldu2Total[0], ldu2Total[0] > 0 ? 100.0 * ldu2ValidEsp[0] / ldu2Total[0] : 0);
+            int totalCallable = hduValidHeader[0] + ldu1ValidLcw[0] + ldu2ValidEsp[0];
+            if(totalCallable == 0 && (ldu1Total[0] + ldu2Total[0]) > 0)
+            {
+                System.out.println("  *** WARNING: Zero valid LCW/ESP — live decoder would produce NO calls ***");
+            }
         }
 
         IMBEDiagSummary diagSummary = null;

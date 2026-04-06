@@ -25,6 +25,7 @@ package io.github.dsheirer.channel.state;
 import io.github.dsheirer.audio.squelch.ISquelchStateProvider;
 import io.github.dsheirer.audio.squelch.SquelchState;
 import io.github.dsheirer.audio.squelch.SquelchStateEvent;
+import io.github.dsheirer.module.decode.p25.phase1.P25PipelineDiagnostics;
 import io.github.dsheirer.sample.Listener;
 
 public class StateMonitoringSquelchController implements IStateMachineListener, ISquelchStateProvider
@@ -59,6 +60,11 @@ public class StateMonitoringSquelchController implements IStateMachineListener, 
     {
         if(mSquelchState != squelchState)
         {
+            if(P25PipelineDiagnostics.isEnabled())
+            {
+                P25PipelineDiagnostics.log("SQUELCH", "SQUELCH_CTRL", squelchState.name(),
+                    "from=" + mSquelchState + " to=" + squelchState);
+            }
             mSquelchState = squelchState;
 
             if(mSquelchStateListener != null)

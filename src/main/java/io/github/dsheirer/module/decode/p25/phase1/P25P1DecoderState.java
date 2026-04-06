@@ -326,6 +326,12 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
     {
         if(iMessage instanceof P25P1Message message)
         {
+            if(P25PipelineDiagnostics.isEnabled())
+            {
+                P25PipelineDiagnostics.log(mChannel.getName(), "DECODER_STATE", "MSG_RECV",
+                    message.getDUID().name() + " valid=" + message.isValid() + " nac=" + message.getNAC());
+            }
+
             getIdentifierCollection().update(message.getNAC());
 
             switch(message.getDUID())
@@ -910,11 +916,19 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
 
                 if(headerData.isEncryptedAudio())
                 {
+                    if(P25PipelineDiagnostics.isEnabled())
+                    {
+                        P25PipelineDiagnostics.log(mChannel.getName(), "DECODER_STATE", "HDU_ENCRYPTED", "START/ENCRYPTED");
+                    }
                     broadcast(new DecoderStateEvent(this, Event.START, State.ENCRYPTED));
                 }
                 else
                 {
                     mDiagCallStartCount++;
+                    if(P25PipelineDiagnostics.isEnabled())
+                    {
+                        P25PipelineDiagnostics.log(mChannel.getName(), "DECODER_STATE", "HDU_CALL_START", "START/CALL tg=" + headerData.getTalkgroup());
+                    }
                     broadcast(new DecoderStateEvent(this, Event.START, State.CALL));
                 }
             }
@@ -968,6 +982,17 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
                 }
                 validLDUProcessed = true;
             }
+        }
+
+        // Fallback: if LDU message is valid at the NID level (BCH passed) but the embedded
+        // LCW (LDU1) or ESP (LDU2) failed Reed-Solomon validation, still maintain CALL state
+        // so audio flows. The IMBE voice data in the LDU is independent of the link control
+        // metadata. This is safe because the Spec 023 DUID correction limit prevents infinite
+        // fake LDU generation from noise.
+        if(!validLDUProcessed && message.isValid())
+        {
+            broadcast(new DecoderStateEvent(this, Event.CONTINUATION, State.CALL));
+            validLDUProcessed = true;
         }
 
         // Update timestamp and reset holdover state when valid LDU is processed
@@ -1106,6 +1131,10 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
 
         if(tduFadeC4FM && (mModulation == Modulation.C4FM || mModulation == Modulation.C4FM_V2))
         {
+            if(P25PipelineDiagnostics.isEnabled())
+            {
+                P25PipelineDiagnostics.log(mChannel.getName(), "DECODER_STATE", "TDU_FADE", "C4FM TDU→END/FADE");
+            }
             broadcast(new DecoderStateEvent(this, Event.END, State.FADE));
         }
         else
