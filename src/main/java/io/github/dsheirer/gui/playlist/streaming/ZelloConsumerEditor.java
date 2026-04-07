@@ -42,6 +42,9 @@ import org.slf4j.LoggerFactory;
  * - Password: Zello account password
  * - Auth Token: JWT token (required for Zello Consumer)
  * - Max Recording Age: Maximum age of audio recording before it is discarded
+ * - Stream Guard: Minimum gap between streams (ms)
+ * - Pause Time: Delay between transmissions (ms)
+ * - Relaxation Time: Hold-over before ending stream (ms)
  */
 public class ZelloConsumerEditor extends AbstractBroadcastEditor<ZelloConsumerConfiguration>
 {
@@ -52,6 +55,9 @@ public class ZelloConsumerEditor extends AbstractBroadcastEditor<ZelloConsumerCo
     private PasswordField mPasswordField;
     private TextField mAuthTokenTextField;
     private IntegerTextField mMaxAgeTextField;
+    private IntegerTextField mStreamGuardTextField;
+    private IntegerTextField mPauseTimeTextField;
+    private IntegerTextField mRelaxationTimeTextField;
     private GridPane mEditorPane;
 
     /**
@@ -73,6 +79,9 @@ public class ZelloConsumerEditor extends AbstractBroadcastEditor<ZelloConsumerCo
         getPasswordField().setDisable(item == null);
         getAuthTokenTextField().setDisable(item == null);
         getMaxAgeTextField().setDisable(item == null);
+        getStreamGuardTextField().setDisable(item == null);
+        getPauseTimeTextField().setDisable(item == null);
+        getRelaxationTimeTextField().setDisable(item == null);
 
         if(item != null)
         {
@@ -81,6 +90,9 @@ public class ZelloConsumerEditor extends AbstractBroadcastEditor<ZelloConsumerCo
             getPasswordField().setText(item.getPassword());
             getAuthTokenTextField().setText(item.getAuthToken());
             getMaxAgeTextField().set((int)(item.getMaximumRecordingAge() / 1000));
+            getStreamGuardTextField().set(item.getStreamGuardMs());
+            getPauseTimeTextField().set(item.getPauseTimeMs());
+            getRelaxationTimeTextField().set(item.getRelaxationTimeMs());
         }
         else
         {
@@ -89,6 +101,9 @@ public class ZelloConsumerEditor extends AbstractBroadcastEditor<ZelloConsumerCo
             getPasswordField().setText(null);
             getAuthTokenTextField().setText(null);
             getMaxAgeTextField().set(0);
+            getStreamGuardTextField().set(500);
+            getPauseTimeTextField().set(0);
+            getRelaxationTimeTextField().set(0);
         }
 
         modifiedProperty().set(false);
@@ -109,6 +124,9 @@ public class ZelloConsumerEditor extends AbstractBroadcastEditor<ZelloConsumerCo
             getItem().setPassword(getPasswordField().getText());
             getItem().setAuthToken(getAuthTokenTextField().getText());
             getItem().setMaximumRecordingAge(getMaxAgeTextField().get() * 1000);
+            getItem().setStreamGuardMs(getStreamGuardTextField().get());
+            getItem().setPauseTimeMs(getPauseTimeTextField().get());
+            getItem().setRelaxationTimeMs(getRelaxationTimeTextField().get());
         }
 
         super.save();
@@ -202,6 +220,45 @@ public class ZelloConsumerEditor extends AbstractBroadcastEditor<ZelloConsumerCo
 
             GridPane.setConstraints(getMaxAgeTextField(), 1, row);
             mEditorPane.getChildren().add(getMaxAgeTextField());
+
+            // Row 7: Stream Guard Timeout
+            Label streamGuardLabel = new Label("Stream Guard (ms)");
+            GridPane.setHalignment(streamGuardLabel, HPos.RIGHT);
+            GridPane.setConstraints(streamGuardLabel, 0, ++row);
+            mEditorPane.getChildren().add(streamGuardLabel);
+
+            GridPane.setConstraints(getStreamGuardTextField(), 1, row);
+            mEditorPane.getChildren().add(getStreamGuardTextField());
+
+            Label streamGuardHint = new Label("Min gap between streams (0 = disabled)");
+            GridPane.setConstraints(streamGuardHint, 2, row, 2, 1);
+            mEditorPane.getChildren().add(streamGuardHint);
+
+            // Row 8: Pause Time
+            Label pauseTimeLabel = new Label("Pause Time (ms)");
+            GridPane.setHalignment(pauseTimeLabel, HPos.RIGHT);
+            GridPane.setConstraints(pauseTimeLabel, 0, ++row);
+            mEditorPane.getChildren().add(pauseTimeLabel);
+
+            GridPane.setConstraints(getPauseTimeTextField(), 1, row);
+            mEditorPane.getChildren().add(getPauseTimeTextField());
+
+            Label pauseTimeHint = new Label("Delay between transmissions (0 = off)");
+            GridPane.setConstraints(pauseTimeHint, 2, row, 2, 1);
+            mEditorPane.getChildren().add(pauseTimeHint);
+
+            // Row 9: Relaxation Time
+            Label relaxationLabel = new Label("Relaxation Time (ms)");
+            GridPane.setHalignment(relaxationLabel, HPos.RIGHT);
+            GridPane.setConstraints(relaxationLabel, 0, ++row);
+            mEditorPane.getChildren().add(relaxationLabel);
+
+            GridPane.setConstraints(getRelaxationTimeTextField(), 1, row);
+            mEditorPane.getChildren().add(getRelaxationTimeTextField());
+
+            Label relaxationHint = new Label("Hold-over before ending stream (0 = off)");
+            GridPane.setConstraints(relaxationHint, 2, row, 2, 1);
+            mEditorPane.getChildren().add(relaxationHint);
         }
 
         return mEditorPane;
@@ -213,6 +270,7 @@ public class ZelloConsumerEditor extends AbstractBroadcastEditor<ZelloConsumerCo
         {
             mChannelTextField = new TextField();
             mChannelTextField.setDisable(true);
+            mChannelTextField.setPrefWidth(300);
             mChannelTextField.setPromptText("Zello channel name");
             mChannelTextField.textProperty().addListener(mEditorModificationListener);
         }
@@ -247,6 +305,7 @@ public class ZelloConsumerEditor extends AbstractBroadcastEditor<ZelloConsumerCo
         {
             mAuthTokenTextField = new TextField();
             mAuthTokenTextField.setDisable(true);
+            mAuthTokenTextField.setPrefWidth(300);
             mAuthTokenTextField.setPromptText("JWT authentication token");
             mAuthTokenTextField.textProperty().addListener(mEditorModificationListener);
         }
@@ -262,5 +321,38 @@ public class ZelloConsumerEditor extends AbstractBroadcastEditor<ZelloConsumerCo
             mMaxAgeTextField.textProperty().addListener(mEditorModificationListener);
         }
         return mMaxAgeTextField;
+    }
+
+    private IntegerTextField getStreamGuardTextField()
+    {
+        if(mStreamGuardTextField == null)
+        {
+            mStreamGuardTextField = new IntegerTextField();
+            mStreamGuardTextField.setDisable(true);
+            mStreamGuardTextField.textProperty().addListener(mEditorModificationListener);
+        }
+        return mStreamGuardTextField;
+    }
+
+    private IntegerTextField getPauseTimeTextField()
+    {
+        if(mPauseTimeTextField == null)
+        {
+            mPauseTimeTextField = new IntegerTextField();
+            mPauseTimeTextField.setDisable(true);
+            mPauseTimeTextField.textProperty().addListener(mEditorModificationListener);
+        }
+        return mPauseTimeTextField;
+    }
+
+    private IntegerTextField getRelaxationTimeTextField()
+    {
+        if(mRelaxationTimeTextField == null)
+        {
+            mRelaxationTimeTextField = new IntegerTextField();
+            mRelaxationTimeTextField.setDisable(true);
+            mRelaxationTimeTextField.textProperty().addListener(mEditorModificationListener);
+        }
+        return mRelaxationTimeTextField;
     }
 }

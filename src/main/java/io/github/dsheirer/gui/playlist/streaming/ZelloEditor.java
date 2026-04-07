@@ -52,6 +52,9 @@ public class ZelloEditor extends AbstractBroadcastEditor<ZelloConfiguration>
     private TextField mUsernameTextField;
     private PasswordField mPasswordField;
     private IntegerTextField mMaxAgeTextField;
+    private IntegerTextField mStreamGuardTextField;
+    private IntegerTextField mPauseTimeTextField;
+    private IntegerTextField mRelaxationTimeTextField;
     private GridPane mEditorPane;
 
     /**
@@ -73,6 +76,9 @@ public class ZelloEditor extends AbstractBroadcastEditor<ZelloConfiguration>
         getUsernameTextField().setDisable(item == null);
         getPasswordField().setDisable(item == null);
         getMaxAgeTextField().setDisable(item == null);
+        getStreamGuardTextField().setDisable(item == null);
+        getPauseTimeTextField().setDisable(item == null);
+        getRelaxationTimeTextField().setDisable(item == null);
 
         if(item != null)
         {
@@ -81,6 +87,9 @@ public class ZelloEditor extends AbstractBroadcastEditor<ZelloConfiguration>
             getUsernameTextField().setText(item.getUsername());
             getPasswordField().setText(item.getPassword());
             getMaxAgeTextField().set((int)(item.getMaximumRecordingAge() / 1000));
+            getStreamGuardTextField().set(item.getStreamGuardMs());
+            getPauseTimeTextField().set(item.getPauseTimeMs());
+            getRelaxationTimeTextField().set(item.getRelaxationTimeMs());
         }
         else
         {
@@ -89,6 +98,9 @@ public class ZelloEditor extends AbstractBroadcastEditor<ZelloConfiguration>
             getUsernameTextField().setText(null);
             getPasswordField().setText(null);
             getMaxAgeTextField().set(0);
+            getStreamGuardTextField().set(500);
+            getPauseTimeTextField().set(0);
+            getRelaxationTimeTextField().set(0);
         }
 
         modifiedProperty().set(false);
@@ -109,6 +121,9 @@ public class ZelloEditor extends AbstractBroadcastEditor<ZelloConfiguration>
             getItem().setUsername(getUsernameTextField().getText());
             getItem().setPassword(getPasswordField().getText());
             getItem().setMaximumRecordingAge(getMaxAgeTextField().get() * 1000);
+            getItem().setStreamGuardMs(getStreamGuardTextField().get());
+            getItem().setPauseTimeMs(getPauseTimeTextField().get());
+            getItem().setRelaxationTimeMs(getRelaxationTimeTextField().get());
         }
 
         super.save();
@@ -207,6 +222,45 @@ public class ZelloEditor extends AbstractBroadcastEditor<ZelloConfiguration>
 
             GridPane.setConstraints(getMaxAgeTextField(), 1, row);
             mEditorPane.getChildren().add(getMaxAgeTextField());
+
+            // Row 7: Stream Guard Timeout
+            Label streamGuardLabel = new Label("Stream Guard (ms)");
+            GridPane.setHalignment(streamGuardLabel, HPos.RIGHT);
+            GridPane.setConstraints(streamGuardLabel, 0, ++row);
+            mEditorPane.getChildren().add(streamGuardLabel);
+
+            GridPane.setConstraints(getStreamGuardTextField(), 1, row);
+            mEditorPane.getChildren().add(getStreamGuardTextField());
+
+            Label streamGuardHint = new Label("Min gap between streams (0 = disabled)");
+            GridPane.setConstraints(streamGuardHint, 2, row, 2, 1);
+            mEditorPane.getChildren().add(streamGuardHint);
+
+            // Row 8: Pause Time
+            Label pauseTimeLabel = new Label("Pause Time (ms)");
+            GridPane.setHalignment(pauseTimeLabel, HPos.RIGHT);
+            GridPane.setConstraints(pauseTimeLabel, 0, ++row);
+            mEditorPane.getChildren().add(pauseTimeLabel);
+
+            GridPane.setConstraints(getPauseTimeTextField(), 1, row);
+            mEditorPane.getChildren().add(getPauseTimeTextField());
+
+            Label pauseTimeHint = new Label("Delay between transmissions (0 = off)");
+            GridPane.setConstraints(pauseTimeHint, 2, row, 2, 1);
+            mEditorPane.getChildren().add(pauseTimeHint);
+
+            // Row 9: Relaxation Time
+            Label relaxationLabel = new Label("Relaxation Time (ms)");
+            GridPane.setHalignment(relaxationLabel, HPos.RIGHT);
+            GridPane.setConstraints(relaxationLabel, 0, ++row);
+            mEditorPane.getChildren().add(relaxationLabel);
+
+            GridPane.setConstraints(getRelaxationTimeTextField(), 1, row);
+            mEditorPane.getChildren().add(getRelaxationTimeTextField());
+
+            Label relaxationHint = new Label("Hold-over before ending stream (0 = off)");
+            GridPane.setConstraints(relaxationHint, 2, row, 2, 1);
+            mEditorPane.getChildren().add(relaxationHint);
         }
 
         return mEditorPane;
@@ -218,6 +272,7 @@ public class ZelloEditor extends AbstractBroadcastEditor<ZelloConfiguration>
         {
             mNetworkNameTextField = new TextField();
             mNetworkNameTextField.setDisable(true);
+            mNetworkNameTextField.setPrefWidth(300);
             mNetworkNameTextField.setPromptText("e.g., actionpage");
             mNetworkNameTextField.textProperty().addListener(mEditorModificationListener);
         }
@@ -230,6 +285,7 @@ public class ZelloEditor extends AbstractBroadcastEditor<ZelloConfiguration>
         {
             mChannelTextField = new TextField();
             mChannelTextField.setDisable(true);
+            mChannelTextField.setPrefWidth(300);
             mChannelTextField.setPromptText("Zello channel name");
             mChannelTextField.textProperty().addListener(mEditorModificationListener);
         }
@@ -267,5 +323,38 @@ public class ZelloEditor extends AbstractBroadcastEditor<ZelloConfiguration>
             mMaxAgeTextField.textProperty().addListener(mEditorModificationListener);
         }
         return mMaxAgeTextField;
+    }
+
+    private IntegerTextField getStreamGuardTextField()
+    {
+        if(mStreamGuardTextField == null)
+        {
+            mStreamGuardTextField = new IntegerTextField();
+            mStreamGuardTextField.setDisable(true);
+            mStreamGuardTextField.textProperty().addListener(mEditorModificationListener);
+        }
+        return mStreamGuardTextField;
+    }
+
+    private IntegerTextField getPauseTimeTextField()
+    {
+        if(mPauseTimeTextField == null)
+        {
+            mPauseTimeTextField = new IntegerTextField();
+            mPauseTimeTextField.setDisable(true);
+            mPauseTimeTextField.textProperty().addListener(mEditorModificationListener);
+        }
+        return mPauseTimeTextField;
+    }
+
+    private IntegerTextField getRelaxationTimeTextField()
+    {
+        if(mRelaxationTimeTextField == null)
+        {
+            mRelaxationTimeTextField = new IntegerTextField();
+            mRelaxationTimeTextField.setDisable(true);
+            mRelaxationTimeTextField.textProperty().addListener(mEditorModificationListener);
+        }
+        return mRelaxationTimeTextField;
     }
 }

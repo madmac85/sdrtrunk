@@ -22,6 +22,8 @@ package io.github.dsheirer.audio.broadcast;
 import io.github.dsheirer.sample.Listener;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleObjectProperty;
+import javafx.beans.property.SimpleStringProperty;
+import javafx.beans.property.StringProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,6 +37,7 @@ public abstract class AbstractAudioBroadcaster<T extends BroadcastConfiguration>
     private T mBroadcastConfiguration;
     protected ObjectProperty<BroadcastState> mBroadcastState = new SimpleObjectProperty<>(BroadcastState.READY);
     protected ObjectProperty<BroadcastState> mLastBadBroadcastState = new SimpleObjectProperty<>();
+    protected StringProperty mLastErrorDetail = new SimpleStringProperty();
     protected int mStreamedAudioCount = 0;
     protected int mErrorAudioCount = 0;
     protected int mAgedOffAudioCount = 0;
@@ -80,6 +83,7 @@ public abstract class AbstractAudioBroadcaster<T extends BroadcastConfiguration>
         if(broadcastState == BroadcastState.CONNECTED)
         {
             mLastBadBroadcastState.setValue(null);
+            mLastErrorDetail.setValue(null);
         }
         else if(broadcastState.isErrorState() || broadcastState.isWarningState())
         {
@@ -95,6 +99,31 @@ public abstract class AbstractAudioBroadcaster<T extends BroadcastConfiguration>
     public BroadcastState getLastBadBroadcastState()
     {
         return mLastBadBroadcastState.get();
+    }
+
+    /**
+     * Observable last error detail string — provides specific error info
+     * (e.g., "[3007] invalid stream id — stop_stream(id=42)")
+     */
+    public StringProperty lastErrorDetailProperty()
+    {
+        return mLastErrorDetail;
+    }
+
+    /**
+     * Sets a detailed error description for display in the streaming table
+     */
+    public void setLastErrorDetail(String detail)
+    {
+        mLastErrorDetail.setValue(detail);
+    }
+
+    /**
+     * Gets the last error detail string
+     */
+    public String getLastErrorDetail()
+    {
+        return mLastErrorDetail.get();
     }
 
     /**

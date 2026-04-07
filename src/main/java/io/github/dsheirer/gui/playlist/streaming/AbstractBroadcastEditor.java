@@ -184,6 +184,7 @@ public abstract class AbstractBroadcastEditor<T extends BroadcastConfiguration> 
         {
             mNameTextField = new TextField();
             mNameTextField.setDisable(true);
+            mNameTextField.setPrefWidth(300);
             mNameTextField.textProperty().addListener(mEditorModificationListener);
         }
 
