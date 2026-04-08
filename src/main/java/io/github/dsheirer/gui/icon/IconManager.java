@@ -9,13 +9,10 @@ import javafx.scene.layout.VBox;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Simplified IconManager to resolve compilation errors.
- */
 public class IconManager extends Editor<Icon>
 {
     private final static Logger mLog = LoggerFactory.getLogger(IconManager.class);
-    private TableView<Icon> mIconTableView;
+    private TableView<Icon> mIconTableView = new TableView<>();
     private IconModel mIconModel;
 
     public IconManager(IconModel iconModel)
@@ -23,7 +20,6 @@ public class IconManager extends Editor<Icon>
         mIconModel = iconModel;
         
         VBox layout = new VBox();
-        mIconTableView = new TableView<>();
         
         try {
             mIconTableView.setItems(new SortedList<>(mIconModel.iconsProperty()));
@@ -33,28 +29,21 @@ public class IconManager extends Editor<Icon>
 
         layout.getChildren().add(mIconTableView);
         
-        // Satisfy the requirement to set the editor's visual node
-        // Most SDRTrunk Editor versions use one of these:
-        try {
-            this.setNode(layout);
-        } catch (Throwable t) {
-            // Fallback if setNode doesn't exist in this version
-        }
+        // Use setEditorNode which is the standard method in this version of SDRTrunk
+        setEditorNode(layout);
     }
 
     @Override
     public void save() {
-        // Implemented to satisfy abstract requirement
+        // Required by the Editor base class
     }
 
-    @Override
     public void cancel() {
-        // Implemented to satisfy abstract requirement
+        // Optional implementation
     }
 
-    @Override
     public void dispose() {
-        // Implemented to satisfy abstract requirement
+        // Optional implementation
     }
 
     @Override
