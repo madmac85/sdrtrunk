@@ -400,20 +400,6 @@ public class SDRTrunk implements Listener<TunerEvent>
         JMenu fileMenu = new JMenu("File");
         menuBar.add(fileMenu);
 
-        JMenuItem processingStatusReportMenuItem = new JMenuItem("Processing Diagnostic Report");
-        processingStatusReportMenuItem.addActionListener(e -> {
-            try
-            {
-                Path path = mDiagnosticMonitor.generateProcessingDiagnosticReport("User initiated diagnostic report");
-                JOptionPane.showMessageDialog(mMainGui, "Report created: " + path.toString(), "Processing Status Report Created", JOptionPane.INFORMATION_MESSAGE);
-            }
-            catch(IOException ioe)
-            {
-                mLog.error("Error creating processing status report file", ioe);
-                JOptionPane.showMessageDialog(mMainGui, "Unable to create report file.", "Processing Status Report Failed", JOptionPane.ERROR_MESSAGE);
-            }
-        });
-
         JMenuItem exitMenu = new JMenuItem("Exit");
         exitMenu.addActionListener(event -> {
                 processShutdown();
@@ -425,6 +411,47 @@ public class SDRTrunk implements Listener<TunerEvent>
         JMenu viewMenu = new JMenu("View");
         menuBar.add(viewMenu);
 
+        // --- FULL VIEW MENU RESTORATION ---
+        JMenuItem viewPlaylistItem = new JMenuItem("Playlist Editor");
+        viewPlaylistItem.setIcon(IconFontSwing.buildIcon(FontAwesome.PLAY_CIRCLE_O, 12));
+        viewPlaylistItem.addActionListener(e -> MyEventBus.getGlobalEventBus().post(new ViewPlaylistRequest()));
+        viewMenu.add(viewPlaylistItem);
+
+        viewMenu.add(new JSeparator());
+
+        JMenuItem viewLogsMenu = new JMenuItem("Application Log Files");
+        viewLogsMenu.setIcon(IconFontSwing.buildIcon(FontAwesome.FOLDER_OPEN_O, 12));
+        viewLogsMenu.addActionListener(arg0 -> {
+            File logsDirectory = mUserPreferences.getDirectoryPreference().getDirectoryApplicationLog().toFile();
+            try { Desktop.getDesktop().open(logsDirectory); }
+            catch(Exception e) { mLog.error("Couldn't open logs"); }
+        });
+        viewMenu.add(viewLogsMenu);
+
+        JMenuItem viewRecordingsMenu = new JMenuItem("Audio Recordings");
+        viewRecordingsMenu.setIcon(IconFontSwing.buildIcon(FontAwesome.FOLDER_OPEN_O, 12));
+        viewRecordingsMenu.addActionListener(arg0 -> {
+            File recordingsDirectory = mUserPreferences.getDirectoryPreference().getDirectoryRecording().toFile();
+            try { Desktop.getDesktop().open(recordingsDirectory); }
+            catch(Exception e) { mLog.error("Couldn't open recordings"); }
+        });
+        viewMenu.add(viewRecordingsMenu);
+
+        JMenuItem iconManagerMenu = new JMenuItem("Icon Manager");
+        iconManagerMenu.setIcon(IconFontSwing.buildIcon(FontAwesome.PICTURE_O, 12));
+        iconManagerMenu.addActionListener(arg0 -> MyEventBus.getGlobalEventBus().post(new ViewIconManagerRequest()));
+        viewMenu.add(iconManagerMenu);
+
+        JMenuItem recordingViewerMenu = new JMenuItem("Message Recording Viewer (.bits)");
+        recordingViewerMenu.setIcon(IconFontSwing.buildIcon(FontAwesome.BRAILLE, 12));
+        recordingViewerMenu.addActionListener(e -> MyEventBus.getGlobalEventBus().post(new ViewRecordingViewerRequest()));
+        viewMenu.add(recordingViewerMenu);
+
+        JMenuItem preferencesItem = new JMenuItem("User Preferences");
+        preferencesItem.setIcon(IconFontSwing.buildIcon(FontAwesome.COG, 12));
+        preferencesItem.addActionListener(e -> MyEventBus.getGlobalEventBus().post(new ViewUserPreferenceEditorRequest()));
+        viewMenu.add(preferencesItem);
+
         viewMenu.add(new JSeparator());
         viewMenu.add(new TunersMenu());
         viewMenu.add(new JSeparator());
@@ -434,6 +461,7 @@ public class SDRTrunk implements Listener<TunerEvent>
         viewMenu.add(new ResourceStatusVisibleMenuItem());
 
         JMenuItem screenCaptureItem = new JMenuItem("Screen Capture");
+        screenCaptureItem.setIcon(IconFontSwing.buildIcon(FontAwesome.CAMERA, 12));
         screenCaptureItem.addActionListener(arg0 -> {
             try
             {
@@ -542,22 +570,57 @@ public class SDRTrunk implements Listener<TunerEvent>
 
     public class BroadcastStatusVisibleMenuItem extends JCheckBoxMenuItem
     {
-        public BroadcastStatusVisibleMenuItem() { super("Show Streaming Status"); setSelected(mBroadcastStatusVisible); addActionListener(e -> toggleBroadcastStatusPanelVisibility()); }
+        public BroadcastStatusVisibleMenuItem() { 
+            super("Show Streaming Status"); 
+            setSelected(mBroadcastStatusVisible); 
+            addActionListener(e -> toggleBroadcastStatusPanelVisibility()); 
+        }
     }
 
     public class ResourceStatusVisibleMenuItem extends JCheckBoxMenuItem
     {
-        public ResourceStatusVisibleMenuItem() { super("Show Resource Status"); setSelected(mResourceStatusVisible); addActionListener(e -> toggleResourceStatusPanelVisibility()); }
+        public ResourceStatusVisibleMenuItem() { 
+            super("Show Resource Status"); 
+            setSelected(mResourceStatusVisible); 
+            addActionListener(e -> toggleResourceStatusPanelVisibility()); 
+        }
     }
 
     public class NowPlayingChannelDetailsVisibleMenuItem extends JCheckBoxMenuItem
     {
-        public NowPlayingChannelDetailsVisibleMenuItem() { super("Show Now Playing Channel Details"); setSelected(mNowPlayingDetailsVisible); addActionListener(e -> toggleNowPlayingDetailsPanelVisibility()); }
+        public NowPlayingChannelDetailsVisibleMenuItem() { 
+            super("Show Now Playing Channel Details"); 
+            setSelected(mNowPlayingDetailsVisible); 
+            addActionListener(e -> toggleNowPlayingDetailsPanelVisibility()); 
+        }
     }
 
     public class TunersMenu extends JMenu
     {
-        public TunersMenu() { super("Tuners"); }
+        public TunersMenu()
+        {
+            super("Tuners");
+
+            addMenuListener(new MenuListener()
+            {
+                @Override
+                public void menuSelected(MenuEvent e)
+                {
+                    removeAll();
+
+                    for(DiscoveredTuner discoveredTuner: mTunerManager.getAvailableTuners())
+                    {
+                        add(new ShowTunerMenuItem(mTunerManager.getDiscoveredTunerModel(), discoveredTuner.getTuner()));
+                    }
+                }
+
+                @Override
+                public void menuDeselected(MenuEvent e) { }
+                @Override
+                public void menuCanceled(MenuEvent e) { }
+            });
+        }
+
     }
 
     public static void main(String[] args)
