@@ -94,6 +94,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.formdev.flatlaf.FlatDarkLaf;
+import com.formdev.flatlaf.FlatLightLaf;
+import io.github.dsheirer.preference.gui.FlatLafTheme;
+import io.github.dsheirer.preference.gui.GuiPreference;
 import io.github.dsheirer.util.OSType;
 import javax.imageio.ImageIO;
 import javax.swing.JCheckBoxMenuItem;
@@ -763,19 +766,28 @@ public class SDRTrunk implements Listener<TunerEvent>
     {
         System.out.println("Starting SDRTrunk...");
 
-        // Apply FlatLaf modern look and feel on Windows 11 before any Swing components are created
+        // Apply FlatLaf modern look and feel on Windows 11 before any Swing components are created.
+        // The theme (Light or Dark) is read from the stored user preference; Light is the default.
         OSType currentOS = OSType.getCurrentOSType();
         if(currentOS.isWindows() && currentOS.isWindows11OrHigher())
         {
             try
             {
+                FlatLafTheme theme = GuiPreference.readStoredTheme();
                 System.setProperty("flatlaf.useWindowDecorations", "true");
                 System.setProperty("flatlaf.menuBarEmbedded", "true");
-                FlatDarkLaf.setup();
+                if(theme == FlatLafTheme.DARK)
+                {
+                    FlatDarkLaf.setup();
+                }
+                else
+                {
+                    FlatLightLaf.setup();
+                }
                 UIManager.put("TitlePane.menuBarEmbedded", true);
                 UIManager.put("TabbedPane.showTabSeparators", true);
                 UIManager.put("Component.focusWidth", 1);
-                System.out.println("Windows 11 modern theme (FlatDarkLaf) applied.");
+                System.out.println("Windows 11 modern theme (FlatLaf " + theme + ") applied.");
             }
             catch(Exception e)
             {
