@@ -839,10 +839,16 @@ public class NBFMDecoder extends SquelchControlDecoder implements ISourceEventLi
         mAudioFilters.setSquelchReduction(mNBFMConfig.getNoiseGateReduction());
         mAudioFilters.setHoldTime(mNBFMConfig.getNoiseGateHoldTime());
 
+        // Hiss reduction (high-shelf cut above corner frequency)
+        mAudioFilters.setHissReductionCornerHz(mNBFMConfig.getHissReductionCornerHz());
+        mAudioFilters.setHissReductionDb(mNBFMConfig.getHissReductionDb());
+        mAudioFilters.setHissReductionEnabled(mNBFMConfig.isHissReductionEnabled());
+
         mLog.info("VoxSend audio filters initialized: lowPass={} ({}Hz), deemphasis={} ({}μs), " +
-                "bassBoost={} ({}dB), voiceEnhance={} ({}), noiseGate={} ({}%)",
+                "hissReduction={} ({}dB@{}Hz), bassBoost={} ({}dB), voiceEnhance={} ({}), noiseGate={} ({}%)",
                 mNBFMConfig.isLowPassEnabled(), mNBFMConfig.getLowPassCutoff(),
                 mNBFMConfig.isDeemphasisEnabled(), mNBFMConfig.getDeemphasisTimeConstant(),
+                mNBFMConfig.isHissReductionEnabled(), mNBFMConfig.getHissReductionDb(), mNBFMConfig.getHissReductionCornerHz(),
                 mNBFMConfig.isBassBoostEnabled(), mNBFMConfig.getBassBoostDb(),
                 mNBFMConfig.isAgcEnabled(), voiceEnhanceAmount,
                 mNBFMConfig.isNoiseGateEnabled(), mNBFMConfig.getNoiseGateThreshold());
