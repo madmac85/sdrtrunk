@@ -987,9 +987,10 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
         // Fallback: if LDU message is valid at the NID level (BCH passed) but the embedded
         // LCW (LDU1) or ESP (LDU2) failed Reed-Solomon validation, still maintain CALL state
         // so audio flows. The IMBE voice data in the LDU is independent of the link control
-        // metadata. This is safe because the Spec 023 DUID correction limit prevents infinite
-        // fake LDU generation from noise.
-        if(!validLDUProcessed && message.isValid())
+        // metadata. Exclude DUID-corrected LDUs (noise frames corrected from TDU to LDU by
+        // the framer) — these would keep the state machine stuck in CALL indefinitely via the
+        // correction-limit cycling: 3 corrected LDUs → 1 TDU → reset → repeat.
+        if(!validLDUProcessed && message.isValid() && !message.isDuidCorrected())
         {
             broadcast(new DecoderStateEvent(this, Event.CONTINUATION, State.CALL));
             validLDUProcessed = true;
