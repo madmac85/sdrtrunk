@@ -90,6 +90,9 @@ public class PlaylistEditor extends BorderPane
         mTunerManager = tunerManager;
         mUserPreferences = userPreferences;
 
+        // Apply Windows 11 styling base class
+        getStyleClass().add("win11-style");
+
         //Throw a new runnable back onto the FX thread to lazy load the editor content after the editor has been
         //constructed and shown.
         Platform.runLater(() -> {
