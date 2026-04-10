@@ -58,7 +58,7 @@ import javafx.scene.control.Slider;
 import javafx.scene.control.Spinner;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextFormatter;
-import javafx.scene.control.TitledPane;
+import javafx.scene.control.Tab;
 import javafx.scene.control.Toggle;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.Tooltip;
@@ -75,11 +75,11 @@ import org.controlsfx.control.ToggleSwitch;
  */
 public class NBFMConfigurationEditor extends ChannelConfigurationEditor
 {
-    private TitledPane mAuxDecoderPane;
-    private TitledPane mDecoderPane;
-    private TitledPane mEventLogPane;
-    private TitledPane mRecordPane;
-    private TitledPane mSourcePane;
+    private Tab mAuxDecoderPane;
+    private Tab mDecoderPane;
+    private Tab mEventLogPane;
+    private Tab mRecordPane;
+    private Tab mSourcePane;
     private TextField mTalkgroupField;
     private ToggleSwitch mAudioFilterEnable;
     private TextFormatter<Integer> mTalkgroupTextFormatter;
@@ -87,14 +87,14 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
     private SegmentedButton mBandwidthButton;
 
     // CTCSS/DCS Tone Filter UI
-    private TitledPane mToneFilterPane;
+    private Tab mToneFilterPane;
     private ToggleSwitch mToneFilterEnabledSwitch;
     private ComboBox<ChannelToneFilter.ToneType> mToneTypeCombo;
     private ComboBox<CTCSSCode> mCtcssCodeCombo;
     private ComboBox<DCSCode> mDcsCodeCombo;
 
     // Squelch Tail Removal UI
-    private TitledPane mSquelchTailPane;
+    private Tab mSquelchTailPane;
     private ToggleSwitch mSquelchTailEnabledSwitch;
     private Spinner<Integer> mTailRemovalSpinner;
     private Spinner<Integer> mHeadRemovalSpinner;
@@ -102,6 +102,7 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
     // Audio Filters (VoxSend Chain) UI
     private TitledPane mAudioFiltersPane;
     private TwoToneDetectorPanel mTwoToneDetectorPanel;
+    private Tab mAudioFiltersPane;
     private Slider mInputGainSlider;
     private Label mInputGainLabel;
     private ToggleSwitch mLowPassEnabledSwitch;
@@ -115,6 +116,11 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
     private ToggleSwitch mBassBoostEnabledSwitch;
     private Slider mBassBoostSlider;
     private Label mBassBoostLabel;
+    private ToggleSwitch mHissReductionEnabledSwitch;
+    private Slider mHissReductionDbSlider;
+    private Label mHissReductionDbLabel;
+    private Slider mHissReductionCornerSlider;
+    private Label mHissReductionCornerLabel;
     private ToggleSwitch mSquelchEnabledSwitch;
     private Slider mSquelchThresholdSlider;
     private Label mSquelchThresholdLabel;
@@ -163,24 +169,25 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
         return DecoderType.NBFM;
     }
 
-    private TitledPane getSourcePane()
+    private Tab getSourcePane()
     {
         if(mSourcePane == null)
         {
-            mSourcePane = new TitledPane("Source", getSourceConfigurationEditor());
-            mSourcePane.setExpanded(true);
+            mSourcePane = new Tab("Source", getSourceConfigurationEditor());
+
         }
 
         return mSourcePane;
     }
 
-    private TitledPane getDecoderPane()
+    private Tab getDecoderPane()
     {
         if(mDecoderPane == null)
         {
-            mDecoderPane = new TitledPane();
+            mDecoderPane = new Tab();
+
             mDecoderPane.setText("Decoder: NBFM");
-            mDecoderPane.setExpanded(true);
+
 
             GridPane gridPane = new GridPane();
             gridPane.setPadding(new Insets(10,10,10,10));
@@ -238,13 +245,14 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
     }
 
     // === Tone Filter (CTCSS / DCS) pane ===
-    private TitledPane getToneFilterPane()
+    private Tab getToneFilterPane()
     {
         if(mToneFilterPane == null)
         {
-            mToneFilterPane = new TitledPane();
+            mToneFilterPane = new Tab();
+
             mToneFilterPane.setText("Tone Filter (CTCSS / DCS)");
-            mToneFilterPane.setExpanded(false);
+
 
             GridPane gridPane = new GridPane();
             gridPane.setPadding(new Insets(10, 10, 10, 10));
@@ -319,13 +327,14 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
     }
 
     // === Squelch Tail Removal pane ===
-    private TitledPane getSquelchTailPane()
+    private Tab getSquelchTailPane()
     {
         if(mSquelchTailPane == null)
         {
-            mSquelchTailPane = new TitledPane();
+            mSquelchTailPane = new Tab();
+
             mSquelchTailPane.setText("Squelch Tail Removal");
-            mSquelchTailPane.setExpanded(false);
+
 
             GridPane gridPane = new GridPane();
             gridPane.setPadding(new Insets(10, 10, 10, 10));
@@ -377,13 +386,14 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
     }
 
     // === Audio Filters (VoxSend Chain) pane ===
-    private TitledPane getAudioFiltersPane()
+    private Tab getAudioFiltersPane()
     {
         if(mAudioFiltersPane == null)
         {
-            mAudioFiltersPane = new TitledPane();
+            mAudioFiltersPane = new Tab();
+
             mAudioFiltersPane.setText("Audio Filters (VoxSend Chain)");
-            mAudioFiltersPane.setExpanded(false);
+
 
             VBox contentBox = new VBox(10);
             contentBox.setPadding(new Insets(10,10,10,10));
@@ -396,23 +406,27 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
             contentBox.getChildren().add(createLowPassSection());
             contentBox.getChildren().add(new Separator());
 
-            // 2. Bass Boost
-            contentBox.getChildren().add(createBassBoostSection());
-            contentBox.getChildren().add(new Separator());
-
-            // 3. De-emphasis
+            // 2. De-emphasis
             contentBox.getChildren().add(createDeemphasisSection());
             contentBox.getChildren().add(new Separator());
 
-            // 4. Voice Enhancement
+            // 3. Hiss Reduction (high-shelf cut)
+            contentBox.getChildren().add(createHissReductionSection());
+            contentBox.getChildren().add(new Separator());
+
+            // 4. Bass Boost
+            contentBox.getChildren().add(createBassBoostSection());
+            contentBox.getChildren().add(new Separator());
+
+            // 5. Voice Enhancement
             contentBox.getChildren().add(createVoiceEnhanceSection());
             contentBox.getChildren().add(new Separator());
 
-            // 5. Intelligent Squelch
+            // 6. Intelligent Squelch
             contentBox.getChildren().add(createSquelchSection());
             contentBox.getChildren().add(new Separator());
 
-            // 6. Output Gain (applied last)
+            // 7. Output Gain (applied last)
             contentBox.getChildren().add(createInputGainSection());
 
             mAudioFiltersPane.setContent(contentBox);
@@ -420,35 +434,36 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
         return mAudioFiltersPane;
     }
 
-    private TitledPane getEventLogPane()
+    private Tab getEventLogPane()
     {
         if(mEventLogPane == null)
         {
-            mEventLogPane = new TitledPane("Logging", getEventLogConfigurationEditor());
-            mEventLogPane.setExpanded(false);
+            mEventLogPane = new Tab("Logging", getEventLogConfigurationEditor());
+
         }
 
         return mEventLogPane;
     }
 
-    private TitledPane getAuxDecoderPane()
+    private Tab getAuxDecoderPane()
     {
         if(mAuxDecoderPane == null)
         {
-            mAuxDecoderPane = new TitledPane("Additional Decoders", getAuxDecoderConfigurationEditor());
-            mAuxDecoderPane.setExpanded(false);
+            mAuxDecoderPane = new Tab("Additional Decoders", getAuxDecoderConfigurationEditor());
+
         }
 
         return mAuxDecoderPane;
     }
 
-    private TitledPane getRecordPane()
+    private Tab getRecordPane()
     {
         if(mRecordPane == null)
         {
-            mRecordPane = new TitledPane();
+            mRecordPane = new Tab();
+
             mRecordPane.setText("Recording");
-            mRecordPane.setExpanded(false);
+
 
             GridPane gridPane = new GridPane();
             gridPane.setPadding(new Insets(10,10,10,10));
@@ -513,7 +528,7 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
     private VBox createInputGainSection()
     {
         VBox section = new VBox(5);
-        Label title = new Label("Output Gain (Applied Last)");
+        Label title = new Label("7. Output Gain (Applied Last)");
         title.setFont(Font.font(null, FontWeight.BOLD, 12));
 
         GridPane controlsPane = new GridPane();
@@ -602,7 +617,7 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
     private VBox createDeemphasisSection()
     {
         VBox section = new VBox(5);
-        Label title = new Label("FM De-emphasis");
+        Label title = new Label("2. FM De-emphasis");
         title.setFont(Font.font(null, FontWeight.BOLD, 12));
 
         mDeemphasisEnabledSwitch = new ToggleSwitch("Enable De-emphasis");
@@ -639,7 +654,7 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
     private VBox createVoiceEnhanceSection()
     {
         VBox section = new VBox(5);
-        Label title = new Label("Voice Enhancement");
+        Label title = new Label("5. Voice Enhancement");
         title.setFont(Font.font(null, FontWeight.BOLD, 12));
 
         mVoiceEnhanceEnabledSwitch = new ToggleSwitch("Enable Voice Enhancement");
@@ -688,7 +703,7 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
     private VBox createBassBoostSection()
     {
         VBox section = new VBox(5);
-        Label title = new Label("Bass Boost");
+        Label title = new Label("4. Bass Boost");
         title.setFont(Font.font(null, FontWeight.BOLD, 12));
 
         mBassBoostEnabledSwitch = new ToggleSwitch("Enable Bass Boost");
@@ -734,10 +749,93 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
         return section;
     }
 
+    private VBox createHissReductionSection()
+    {
+        VBox section = new VBox(5);
+        Label title = new Label("3. Hiss Reduction");
+        title.setFont(Font.font(null, FontWeight.BOLD, 12));
+
+        mHissReductionEnabledSwitch = new ToggleSwitch("Enable Hiss Reduction");
+        mHissReductionEnabledSwitch.setTooltip(new Tooltip(
+                "High-shelf cut above corner frequency to reduce FM hiss.\n" +
+                "Stacks with Low-Pass Filter and De-emphasis."));
+        mHissReductionEnabledSwitch.selectedProperty().addListener((obs, old, val) -> {
+            if(!mLoadingConfiguration)
+            {
+                modifiedProperty().set(true);
+                mHissReductionDbSlider.setDisable(!val);
+                mHissReductionCornerSlider.setDisable(!val);
+            }
+        });
+
+        GridPane controlsPane = new GridPane();
+        controlsPane.setHgap(10);
+        controlsPane.setVgap(5);
+
+        // Row 0: Shelf cut amount
+        Label dbLabel = new Label("Cut Amount:");
+        GridPane.setConstraints(dbLabel, 0, 0);
+        controlsPane.getChildren().add(dbLabel);
+
+        mHissReductionDbSlider = new Slider(-12, 0, -6);
+        mHissReductionDbSlider.setMajorTickUnit(3);
+        mHissReductionDbSlider.setMinorTickCount(2);
+        mHissReductionDbSlider.setShowTickMarks(true);
+        mHissReductionDbSlider.setShowTickLabels(true);
+        mHissReductionDbSlider.setPrefWidth(300);
+        mHissReductionDbSlider.setTooltip(new Tooltip(
+                "High-shelf attenuation above corner frequency.\n" +
+                "0 dB = off, -12 dB = max hiss cut\nDefault: -6 dB"));
+        mHissReductionDbSlider.valueProperty().addListener((obs, old, val) -> {
+            if(!mLoadingConfiguration)
+            {
+                mHissReductionDbLabel.setText(String.format("%.1f dB", val.doubleValue()));
+                modifiedProperty().set(true);
+            }
+        });
+        GridPane.setConstraints(mHissReductionDbSlider, 1, 0);
+        controlsPane.getChildren().add(mHissReductionDbSlider);
+
+        mHissReductionDbLabel = new Label("-6.0 dB");
+        GridPane.setConstraints(mHissReductionDbLabel, 2, 0);
+        controlsPane.getChildren().add(mHissReductionDbLabel);
+
+        // Row 1: Corner frequency
+        Label cornerLabel = new Label("Corner Freq:");
+        GridPane.setConstraints(cornerLabel, 0, 1);
+        controlsPane.getChildren().add(cornerLabel);
+
+        mHissReductionCornerSlider = new Slider(1000, 3500, 2000);
+        mHissReductionCornerSlider.setMajorTickUnit(500);
+        mHissReductionCornerSlider.setMinorTickCount(4);
+        mHissReductionCornerSlider.setShowTickMarks(true);
+        mHissReductionCornerSlider.setShowTickLabels(true);
+        mHissReductionCornerSlider.setPrefWidth(300);
+        mHissReductionCornerSlider.setTooltip(new Tooltip(
+                "Shelf pivot frequency. Hiss above this is attenuated.\n" +
+                "Lower = more hiss cut but slightly duller voice.\nDefault: 2000 Hz"));
+        mHissReductionCornerSlider.valueProperty().addListener((obs, old, val) -> {
+            if(!mLoadingConfiguration)
+            {
+                mHissReductionCornerLabel.setText(String.format("%.0f Hz", val.doubleValue()));
+                modifiedProperty().set(true);
+            }
+        });
+        GridPane.setConstraints(mHissReductionCornerSlider, 1, 1);
+        controlsPane.getChildren().add(mHissReductionCornerSlider);
+
+        mHissReductionCornerLabel = new Label("2000 Hz");
+        GridPane.setConstraints(mHissReductionCornerLabel, 2, 1);
+        controlsPane.getChildren().add(mHissReductionCornerLabel);
+
+        section.getChildren().addAll(title, mHissReductionEnabledSwitch, controlsPane);
+        return section;
+    }
+
     private VBox createSquelchSection()
     {
         VBox section = new VBox(5);
-        Label title = new Label("Squelch / Noise Gate");
+        Label title = new Label("6. Squelch / Noise Gate");
         title.setFont(Font.font(null, FontWeight.BOLD, 12));
 
         mSquelchEnabledSwitch = new ToggleSwitch("Enable Squelch/Noise Gate");
@@ -1250,6 +1348,17 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
         mBassBoostLabel.setText(String.format("+%.1f dB", bassBoostDb));
         mBassBoostSlider.setDisable(!config.isBassBoostEnabled());
 
+        // Hiss Reduction
+        mHissReductionEnabledSwitch.setSelected(config.isHissReductionEnabled());
+        float hissDb = config.getHissReductionDb();
+        mHissReductionDbSlider.setValue(hissDb);
+        mHissReductionDbLabel.setText(String.format("%.1f dB", hissDb));
+        double hissCorner = config.getHissReductionCornerHz();
+        mHissReductionCornerSlider.setValue(hissCorner);
+        mHissReductionCornerLabel.setText(String.format("%.0f Hz", hissCorner));
+        mHissReductionDbSlider.setDisable(!config.isHissReductionEnabled());
+        mHissReductionCornerSlider.setDisable(!config.isHissReductionEnabled());
+
         // Squelch / Noise Gate (Vox-Send style)
         mSquelchEnabledSwitch.setSelected(config.isNoiseGateEnabled());
 
@@ -1283,6 +1392,9 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
         mDeemphasisTimeConstantCombo.setDisable(true);
         mVoiceEnhanceEnabledSwitch.setSelected(false);
         mVoiceEnhanceSlider.setDisable(true);
+        mHissReductionEnabledSwitch.setSelected(false);
+        mHissReductionDbSlider.setDisable(true);
+        mHissReductionCornerSlider.setDisable(true);
         mSquelchEnabledSwitch.setSelected(false);
         mSquelchThresholdSlider.setDisable(true);
         mSquelchReductionSlider.setDisable(true);
@@ -1316,6 +1428,11 @@ public class NBFMConfigurationEditor extends ChannelConfigurationEditor
         // Bass Boost
         config.setBassBoostEnabled(mBassBoostEnabledSwitch.isSelected());
         config.setBassBoostDb((float)mBassBoostSlider.getValue());
+
+        // Hiss Reduction
+        config.setHissReductionEnabled(mHissReductionEnabledSwitch.isSelected());
+        config.setHissReductionDb((float)mHissReductionDbSlider.getValue());
+        config.setHissReductionCornerHz(mHissReductionCornerSlider.getValue());
 
         // Squelch / Noise Gate (Vox-Send style)
         config.setNoiseGateEnabled(mSquelchEnabledSwitch.isSelected());
