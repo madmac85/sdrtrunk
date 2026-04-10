@@ -167,15 +167,28 @@ public class SDRTrunk implements Listener<TunerEvent>
 
         String operatingSystem = System.getProperty("os.name", "generic").toLowerCase(Locale.ENGLISH);
 
-        try {
-            com.formdev.flatlaf.FlatLightLaf.setup();
-            UIManager.put("Button.arc", 8);
-            UIManager.put("Component.arc", 8);
-            UIManager.put("ProgressBar.arc", 8);
-            UIManager.put("TextComponent.arc", 8);
-            LookAndFeelFactory.installJideExtension();
-        } catch (Exception e) {
-            mLog.error("Failed to setup FlatLaf");
+        if(operatingSystem.contains("mac") || operatingSystem.contains("nux"))
+        {
+            try
+            {
+                UIManager.setLookAndFeel(MetalLookAndFeel.class.getName());
+                LookAndFeelFactory.installJideExtension();
+            }
+            catch(Exception e)
+            {
+                mLog.error("Error trying to set Metal look and feel for OS [" + operatingSystem + "]");
+            }
+        }
+        else if(operatingSystem.contains("win"))
+        {
+            try
+            {
+                LookAndFeelFactory.installJideExtension();
+            }
+            catch(Exception e)
+            {
+                mLog.error("Error trying to install JIDE extension for OS [" + operatingSystem + "]");
+            }
         }
 
         ThreadPool.logSettings();
@@ -696,28 +709,28 @@ public class SDRTrunk implements Listener<TunerEvent>
 
     public class BroadcastStatusVisibleMenuItem extends JCheckBoxMenuItem
     {
-        public BroadcastStatusVisibleMenuItem() { 
-            super("Show Streaming Status"); 
-            setSelected(mBroadcastStatusVisible); 
-            addActionListener(e -> toggleBroadcastStatusPanelVisibility()); 
+        public BroadcastStatusVisibleMenuItem() {
+            super("Show Streaming Status");
+            setSelected(mBroadcastStatusVisible);
+            addActionListener(e -> toggleBroadcastStatusPanelVisibility());
         }
     }
 
     public class ResourceStatusVisibleMenuItem extends JCheckBoxMenuItem
     {
-        public ResourceStatusVisibleMenuItem() { 
-            super("Show Resource Status"); 
-            setSelected(mResourceStatusVisible); 
-            addActionListener(e -> toggleResourceStatusPanelVisibility()); 
+        public ResourceStatusVisibleMenuItem() {
+            super("Show Resource Status");
+            setSelected(mResourceStatusVisible);
+            addActionListener(e -> toggleResourceStatusPanelVisibility());
         }
     }
 
     public class NowPlayingChannelDetailsVisibleMenuItem extends JCheckBoxMenuItem
     {
-        public NowPlayingChannelDetailsVisibleMenuItem() { 
-            super("Show Now Playing Channel Details"); 
-            setSelected(mNowPlayingDetailsVisible); 
-            addActionListener(e -> toggleNowPlayingDetailsPanelVisibility()); 
+        public NowPlayingChannelDetailsVisibleMenuItem() {
+            super("Show Now Playing Channel Details");
+            setSelected(mNowPlayingDetailsVisible);
+            addActionListener(e -> toggleNowPlayingDetailsPanelVisibility());
         }
     }
 

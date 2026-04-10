@@ -517,16 +517,4 @@ public class StreamingEditor extends SplitPane
             }
         }
     }
-
-    public void process(ViewStreamRequest request)
-    {
-        for (ConfiguredBroadcast cb : mPlaylistManager.getBroadcastModel().getConfiguredBroadcasts()) {
-            if (cb.getBroadcastConfiguration().getName().equals(request.getStreamName())) {
-                mConfiguredBroadcastTableView.getSelectionModel().select(cb);
-                mConfiguredBroadcastTableView.scrollTo(cb);
-                return;
-            }
-        }
-    }
-
 }
