@@ -947,53 +947,58 @@ public class P25P1DecoderState extends DecoderState implements IChannelEventList
         mDiagLduCount++;
         boolean validLDUProcessed = false;
 
-        if(message instanceof LDU1Message ldu1)
+        // Skip DUID-corrected LDUs entirely for state and identifier processing.
+        // These are noise frames the framer corrected from TDU to LDU — their LCW/ESP
+        // data is garbage that can inject impossible identifiers (channel numbers,
+        // frequencies) and keep the state machine stuck in CALL via correction cycling.
+        // Audio suppression for these is handled separately in P25P1AudioModule.
+        if(!message.isDuidCorrected())
         {
-            LinkControlWord lcw = ldu1.getLinkControlWord();
-
-            if(lcw != null && lcw.isValid())
+            if(message instanceof LDU1Message ldu1)
             {
-                processLC(lcw, message.getTimestamp(), false);
-                mTrafficChannelManager.processP1TrafficLDU1(getCurrentFrequency(),
-                        getIdentifierCollection().getIdentifiers(), message.getTimestamp(), ldu1.toString());
-                validLDUProcessed = true;
-            }
-        }
-        else if(message instanceof LDU2Message ldu2)
-        {
-            EncryptionSyncParameters esp = ldu2.getEncryptionSyncParameters();
+                LinkControlWord lcw = ldu1.getLinkControlWord();
 
-            if(esp != null && esp.isValid())
-            {
-                getIdentifierCollection().update(esp.getIdentifiers());
-
-                if(esp.isEncryptedAudio())
+                if(lcw != null && lcw.isValid())
                 {
-                    mTrafficChannelManager.processP1TrafficCurrentUser(getCurrentFrequency(), esp.getEncryptionKey(),
-                            message.getTimestamp(), ldu2.toString());
-                    broadcast(new DecoderStateEvent(this, Event.CONTINUATION, State.ENCRYPTED));
-                }
-                else
-                {
-                    getIdentifierCollection().remove(Form.ENCRYPTION_KEY);
-                    mTrafficChannelManager.processP1TrafficCurrentUser(getCurrentFrequency(), null,
-                            message.getTimestamp(), ldu2.toString());
+                    processLC(lcw, message.getTimestamp(), false);
+                    mTrafficChannelManager.processP1TrafficLDU1(getCurrentFrequency(),
+                            getIdentifierCollection().getIdentifiers(), message.getTimestamp(), ldu1.toString());
                     broadcast(new DecoderStateEvent(this, Event.CONTINUATION, State.CALL));
+                    validLDUProcessed = true;
                 }
+            }
+            else if(message instanceof LDU2Message ldu2)
+            {
+                EncryptionSyncParameters esp = ldu2.getEncryptionSyncParameters();
+
+                if(esp != null && esp.isValid())
+                {
+                    getIdentifierCollection().update(esp.getIdentifiers());
+
+                    if(esp.isEncryptedAudio())
+                    {
+                        mTrafficChannelManager.processP1TrafficCurrentUser(getCurrentFrequency(), esp.getEncryptionKey(),
+                                message.getTimestamp(), ldu2.toString());
+                        broadcast(new DecoderStateEvent(this, Event.CONTINUATION, State.ENCRYPTED));
+                    }
+                    else
+                    {
+                        getIdentifierCollection().remove(Form.ENCRYPTION_KEY);
+                        mTrafficChannelManager.processP1TrafficCurrentUser(getCurrentFrequency(), null,
+                                message.getTimestamp(), ldu2.toString());
+                        broadcast(new DecoderStateEvent(this, Event.CONTINUATION, State.CALL));
+                    }
+                    validLDUProcessed = true;
+                }
+            }
+
+            // Fallback: valid NID but failed LCW/ESP Reed-Solomon — still maintain CALL
+            // so audio flows. The IMBE voice data is independent of link control metadata.
+            if(!validLDUProcessed && message.isValid())
+            {
+                broadcast(new DecoderStateEvent(this, Event.CONTINUATION, State.CALL));
                 validLDUProcessed = true;
             }
-        }
-
-        // Fallback: if LDU message is valid at the NID level (BCH passed) but the embedded
-        // LCW (LDU1) or ESP (LDU2) failed Reed-Solomon validation, still maintain CALL state
-        // so audio flows. The IMBE voice data in the LDU is independent of the link control
-        // metadata. Exclude DUID-corrected LDUs (noise frames corrected from TDU to LDU by
-        // the framer) — these would keep the state machine stuck in CALL indefinitely via the
-        // correction-limit cycling: 3 corrected LDUs → 1 TDU → reset → repeat.
-        if(!validLDUProcessed && message.isValid() && !message.isDuidCorrected())
-        {
-            broadcast(new DecoderStateEvent(this, Event.CONTINUATION, State.CALL));
-            validLDUProcessed = true;
         }
 
         // Update timestamp and reset holdover state when valid LDU is processed
