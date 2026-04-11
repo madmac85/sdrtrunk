@@ -93,7 +93,7 @@ public abstract class ChannelConfigurationEditor extends Editor<Channel>
     private Button mResetButton;
     private VBox mButtonBox;
     private ScrollPane mTabsScrollPane;
-    private VBox mTabsBox;
+    private javafx.scene.control.TabPane mTabPane;
     private ToggleSwitch mAutoStartSwitch;
     private Spinner<Integer> mAutoStartOrderSpinner;
     private IconNode mPlayGraphicNode;
@@ -490,7 +490,7 @@ public abstract class ChannelConfigurationEditor extends Editor<Channel>
         return mAutoStartOrderSpinner;
     }
 
-    protected VBox getTabPane()
+    protected javafx.scene.control.TabPane getTabPane()
     {
         if(mTabsBox == null)
         {
@@ -507,7 +507,7 @@ public abstract class ChannelConfigurationEditor extends Editor<Channel>
         {
             mTabsScrollPane = new ScrollPane();
             mTabsScrollPane.setFitToWidth(true);
-            mTabsScrollPane.setContent(getTabPane());
+            mTabsScrollPane.setContent(getTabPane()); // Note: if TabPane gets squished, you might remove the ScrollPane or adjust properties
         }
 
         return mTabsScrollPane;

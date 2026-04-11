@@ -171,7 +171,7 @@ public class AMConfigurationEditor extends ChannelConfigurationEditor
 
             //Special handling - the pill button doesn't like to set a selected state if the pane is not expanded,
             //so detect when the pane is expanded and refresh the config view
-            mDecoderPane.expandedProperty().addListener((observable, oldValue, newValue) -> {
+            mDecoderPane.selectedProperty().addListener((observable, oldValue, newValue) -> {
                 if(newValue)
                 {
                     //Reset the config so the editor gets updated

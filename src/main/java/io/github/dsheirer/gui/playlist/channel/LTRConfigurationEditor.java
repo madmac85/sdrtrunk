@@ -111,7 +111,7 @@ public class LTRConfigurationEditor extends ChannelConfigurationEditor
 
             mDecoderPane.setText("Decoder: LTR");
 
-            mDecoderPane.expandedProperty().addListener((observable, oldValue, newValue) -> {
+            mDecoderPane.selectedProperty().addListener((observable, oldValue, newValue) -> {
                 //There's a bug either in the toggle group or the segmented button where setting the toggle to selected
                 //when the control is hidden in a titled pane prevents the selection, so we have to select the toggle
                 //again when the pane is expanded.  This state is detected by a null selected toggle.
