@@ -199,7 +199,6 @@ public class TwoToneDetectorConfigurationEditor extends Editor<TwoToneDetectorCo
         return mZelloAlertTextField;
     }
 
-    @Override
     public boolean isModified() {
         return false;
     }
@@ -209,11 +208,14 @@ public class TwoToneDetectorConfigurationEditor extends Editor<TwoToneDetectorCo
     }
 
     @Override
+    public void dispose() {
+        // Nothing to dispose
+    }
+
     public void revert() {
         setEditorValue(mConfiguration);
     }
 
-    @Override
     public void setEditorValue(TwoToneDetectorConfiguration value) {
         mConfiguration = null;
         if (value != null) {

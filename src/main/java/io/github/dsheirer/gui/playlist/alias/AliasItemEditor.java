@@ -885,8 +885,8 @@ public class AliasItemEditor extends Editor<Alias>
         HBox hbox = new HBox();
         hbox.setPadding(new Insets(10));
         hbox.setSpacing(10);
-        HBox.setHgrow(getStreamsListView(), Priority.ALWAYS);
-        hbox.getChildren().addAll(getStreamsListView(), buttonsBox);
+        HBox.setHgrow(getSelectedStreamsView(), Priority.ALWAYS);
+        hbox.getChildren().addAll(getSelectedStreamsView(), buttonsBox);
 
         return hbox;
     }
@@ -962,7 +962,7 @@ public class AliasItemEditor extends Editor<Alias>
                     title += " (" + getSelectedStreamsView().getItems().size() + ")";
                 }
 
-                getStreamPane().setText(title);
+                streamTab.setText(title);
             });
         }
 
