@@ -24,6 +24,7 @@ public class TwoToneDetectorConfigurationEditor extends Editor<TwoToneDetectorCo
     private CheckBox mZelloAlertEnabledCheckBox;
     private TextField mZelloChannelField;
     private TextField mZelloAlertTextField;
+    private CheckBox mUnknownToneLoggingEnabledCheckBox;
     private TwoToneDetectorConfiguration mConfiguration;
 
     public TwoToneDetectorConfigurationEditor() {
@@ -87,6 +88,12 @@ public class TwoToneDetectorConfigurationEditor extends Editor<TwoToneDetectorCo
         GridPane.setHalignment(zelloAlertTextLabel, HPos.RIGHT);
         gridPane.add(zelloAlertTextLabel, 0, row);
         gridPane.add(getZelloAlertTextField(), 1, row);
+        row++;
+
+        Label unknownToneLoggingLabel = new Label("Log Unknown Tones:");
+        GridPane.setHalignment(unknownToneLoggingLabel, HPos.RIGHT);
+        gridPane.add(unknownToneLoggingLabel, 0, row);
+        gridPane.add(getUnknownToneLoggingEnabledCheckBox(), 1, row);
 
         getChildren().add(gridPane);
 
@@ -113,6 +120,11 @@ public class TwoToneDetectorConfigurationEditor extends Editor<TwoToneDetectorCo
         });
         getZelloAlertTextField().textProperty().addListener((observable, oldValue, newValue) -> {
             if (mConfiguration != null) mConfiguration.setZelloAlertText(newValue);
+        });
+        getUnknownToneLoggingEnabledCheckBox().selectedProperty().addListener((observable, oldValue, newValue) -> {
+            if (mConfiguration != null) {
+                mConfiguration.setUnknownToneLoggingEnabled(newValue);
+            }
         });
     }
 
@@ -199,6 +211,13 @@ public class TwoToneDetectorConfigurationEditor extends Editor<TwoToneDetectorCo
         return mZelloAlertTextField;
     }
 
+    private CheckBox getUnknownToneLoggingEnabledCheckBox() {
+        if (mUnknownToneLoggingEnabledCheckBox == null) {
+            mUnknownToneLoggingEnabledCheckBox = new CheckBox();
+        }
+        return mUnknownToneLoggingEnabledCheckBox;
+    }
+
     public boolean isModified() {
         return false;
     }
@@ -228,6 +247,7 @@ public class TwoToneDetectorConfigurationEditor extends Editor<TwoToneDetectorCo
             getZelloAlertEnabledCheckBox().setSelected(value.isZelloAlertEnabled());
             getZelloChannelField().setText(value.getZelloChannel());
             getZelloAlertTextField().setText(value.getZelloAlertText());
+            getUnknownToneLoggingEnabledCheckBox().setSelected(value.isUnknownToneLoggingEnabled());
 
             getToneBHzField().setDisable(value.isLongTone());
             getToneBDurationMsField().setDisable(value.isLongTone());
@@ -243,6 +263,7 @@ public class TwoToneDetectorConfigurationEditor extends Editor<TwoToneDetectorCo
             getZelloAlertEnabledCheckBox().setSelected(false);
             getZelloChannelField().clear();
             getZelloAlertTextField().clear();
+            getUnknownToneLoggingEnabledCheckBox().setSelected(false);
         }
         mConfiguration = value;
     }

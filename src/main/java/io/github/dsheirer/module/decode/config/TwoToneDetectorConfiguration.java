@@ -13,6 +13,7 @@ public class TwoToneDetectorConfiguration {
     private boolean mZelloAlertEnabled = false;
     private String mZelloChannel = "";
     private String mZelloAlertText = "";
+    private boolean mUnknownToneLoggingEnabled = false;
 
     public String getLabel() {
         return mLabel;
@@ -84,5 +85,13 @@ public class TwoToneDetectorConfiguration {
 
     public void setZelloAlertText(String alertText) {
         mZelloAlertText = alertText;
+    }
+
+    public boolean isUnknownToneLoggingEnabled() {
+        return mUnknownToneLoggingEnabled;
+    }
+
+    public void setUnknownToneLoggingEnabled(boolean enabled) {
+        mUnknownToneLoggingEnabled = enabled;
     }
 }
